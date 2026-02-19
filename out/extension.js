@@ -1,33 +1,69 @@
-import * as vscode from 'vscode';
-import WebSocket from 'ws';
-import * as fs from 'fs';
-import * as path from 'path';
-
+"use strict";
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || (function () {
+    var ownKeys = function(o) {
+        ownKeys = Object.getOwnPropertyNames || function (o) {
+            var ar = [];
+            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
+            return ar;
+        };
+        return ownKeys(o);
+    };
+    return function (mod) {
+        if (mod && mod.__esModule) return mod;
+        var result = {};
+        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+        __setModuleDefault(result, mod);
+        return result;
+    };
+})();
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.activate = activate;
+exports.deactivate = deactivate;
+const vscode = __importStar(require("vscode"));
+const ws_1 = __importDefault(require("ws"));
+const fs = __importStar(require("fs"));
+const path = __importStar(require("path"));
 // ------------------- WebSocket & State -------------------
-
-let ws: WebSocket | undefined;
-let fileProvider: FileProvider;
-let propertiesPanel: PropertiesPanel;
+let ws;
+let fileProvider;
+let propertiesPanel;
 let connected = false;
-
-const pendingRequests = new Map<string, (data: any) => void>();
+const pendingRequests = new Map();
 let nextId = 1;
-
-function generateId(): string {
+function generateId() {
     return `vsc-${nextId++}-${Date.now()}`;
 }
-
-function sendCliCommand(command: string, args?: Record<string, any>): Promise<any> {
+function sendCliCommand(command, args) {
     return new Promise((resolve, reject) => {
-        if (!ws || ws.readyState !== WebSocket.OPEN) {
+        if (!ws || ws.readyState !== ws_1.default.OPEN) {
             return reject(new Error('WebSocket is not connected'));
         }
         const id = generateId();
-        const payload: Record<string, any> = { type: 'cli', command, id };
-        if (args) { payload.args = args; }
+        const payload = { type: 'cli', command, id };
+        if (args) {
+            payload.args = args;
+        }
         pendingRequests.set(id, resolve);
         ws.send(JSON.stringify(payload));
-
         setTimeout(() => {
             if (pendingRequests.has(id)) {
                 pendingRequests.delete(id);
@@ -36,17 +72,15 @@ function sendCliCommand(command: string, args?: Record<string, any>): Promise<an
         }, 30_000);
     });
 }
-
-function sendEdit(args: Record<string, any>): Promise<any> {
+function sendEdit(args) {
     return new Promise((resolve, reject) => {
-        if (!ws || ws.readyState !== WebSocket.OPEN) {
+        if (!ws || ws.readyState !== ws_1.default.OPEN) {
             return reject(new Error('WebSocket is not connected'));
         }
         const id = generateId();
         const payload = { type: 'edit', id, args };
         pendingRequests.set(id, resolve);
         ws.send(JSON.stringify(payload));
-
         setTimeout(() => {
             if (pendingRequests.has(id)) {
                 pendingRequests.delete(id);
@@ -55,336 +89,290 @@ function sendEdit(args: Record<string, any>): Promise<any> {
         }, 30_000);
     });
 }
-
-function handleMessage(raw: string) {
+function handleMessage(raw) {
     try {
         const msg = JSON.parse(raw);
         if (msg.type === 'response' && msg.id && pendingRequests.has(msg.id)) {
-            const cb = pendingRequests.get(msg.id)!;
+            const cb = pendingRequests.get(msg.id);
             pendingRequests.delete(msg.id);
             cb(msg);
         }
-    } catch {
+    }
+    catch {
         // ignore non-JSON
     }
 }
-
 // ------------------- Activation -------------------
-
-export function activate(context: vscode.ExtensionContext) {
+function activate(context) {
     fileProvider = new FileProvider();
     propertiesPanel = new PropertiesPanel();
-
     const fileTreeView = vscode.window.createTreeView('filePanel', {
         treeDataProvider: fileProvider,
         showCollapseAll: true
     });
     context.subscriptions.push(fileTreeView);
-    context.subscriptions.push(
-        vscode.window.registerTreeDataProvider('propertiesPanel', propertiesPanel)
-    );
-
+    context.subscriptions.push(vscode.window.registerTreeDataProvider('propertiesPanel', propertiesPanel));
     // Handle selection changes in the file tree → update properties
-    context.subscriptions.push(
-		fileTreeView.onDidChangeSelection(e => {
-            if (e.selection.length > 0 && e.selection[0] instanceof FileNode) {
-                propertiesPanel.update(e.selection[0]);
-            }
-        })
-    );
-
+    context.subscriptions.push(fileTreeView.onDidChangeSelection(e => {
+        if (e.selection.length > 0 && e.selection[0] instanceof FileNode) {
+            propertiesPanel.update(e.selection[0]);
+        }
+    }));
     // --- Connect ---
-    context.subscriptions.push(
-        vscode.commands.registerCommand('bst.connect', async () => {
-            if (connected) {
-                vscode.window.showInformationMessage('Already connected');
-                return;
+    context.subscriptions.push(vscode.commands.registerCommand('bst.connect', async () => {
+        if (connected) {
+            vscode.window.showInformationMessage('Already connected');
+            return;
+        }
+        ws = new ws_1.default('ws://localhost:5000');
+        ws.on('open', async () => {
+            connected = true;
+            vscode.window.showInformationMessage('Connected to Better Studio server');
+            vscode.commands.executeCommand('setContext', 'bst.connected', true);
+            fileProvider.setConnected(true);
+            try {
+                await checkAndLoadProject();
             }
-
-            ws = new WebSocket('ws://localhost:5000');
-
-            ws.on('open', async () => {
-                connected = true;
-                vscode.window.showInformationMessage('Connected to Better Studio server');
-                vscode.commands.executeCommand('setContext', 'bst.connected', true);
-                fileProvider.setConnected(true);
-                try {
-                    await checkAndLoadProject();
-                } catch (err: any) {
-                    vscode.window.showErrorMessage('Failed to load project: ' + err.message);
-                }
-            });
-
-            ws.on('message', (data) => {
-                handleMessage(data.toString());
-            });
-
-            ws.on('error', (err) => {
-                vscode.window.showErrorMessage('WebSocket error: ' + err.message);
-            });
-
-            ws.on('close', () => {
-                connected = false;
-                vscode.commands.executeCommand('setContext', 'bst.connected', false);
-                fileProvider.setConnected(false);
-                fileProvider.clear();
-                propertiesPanel.clear();
-                vscode.window.showWarningMessage('Disconnected from Better Studio server');
-            });
-        })
-    );
-
-    // --- Disconnect ---
-    context.subscriptions.push(
-        vscode.commands.registerCommand('bst.disconnect', () => {
-            if (ws) { ws.close(); ws = undefined; }
+            catch (err) {
+                vscode.window.showErrorMessage('Failed to load project: ' + err.message);
+            }
+        });
+        ws.on('message', (data) => {
+            handleMessage(data.toString());
+        });
+        ws.on('error', (err) => {
+            vscode.window.showErrorMessage('WebSocket error: ' + err.message);
+        });
+        ws.on('close', () => {
             connected = false;
+            vscode.commands.executeCommand('setContext', 'bst.connected', false);
             fileProvider.setConnected(false);
             fileProvider.clear();
             propertiesPanel.clear();
-            vscode.commands.executeCommand('setContext', 'bst.connected', false);
-        })
-    );
-
+            vscode.window.showWarningMessage('Disconnected from Better Studio server');
+        });
+    }));
+    // --- Disconnect ---
+    context.subscriptions.push(vscode.commands.registerCommand('bst.disconnect', () => {
+        if (ws) {
+            ws.close();
+            ws = undefined;
+        }
+        connected = false;
+        fileProvider.setConnected(false);
+        fileProvider.clear();
+        propertiesPanel.clear();
+        vscode.commands.executeCommand('setContext', 'bst.connected', false);
+    }));
     // --- Edit a property (called from properties panel inline button) ---
-    context.subscriptions.push(
-        vscode.commands.registerCommand('bst.editProperty', async (item: PropertyItem) => {
-            if (!item?.propKey || !item.ownerNode) { return; }
-
-            const newValue = await vscode.window.showInputBox({
-                prompt: `New value for "${item.propKey}"`,
-                value: item.propValue ?? ''
+    context.subscriptions.push(vscode.commands.registerCommand('bst.editProperty', async (item) => {
+        if (!item?.propKey || !item.ownerNode) {
+            return;
+        }
+        const newValue = await vscode.window.showInputBox({
+            prompt: `New value for "${item.propKey}"`,
+            value: item.propValue ?? ''
+        });
+        if (newValue === undefined) {
+            return;
+        }
+        try {
+            await sendEdit({
+                path: item.ownerNode.folderName,
+                action: 'modify',
+                target: 'property',
+                property: item.propKey,
+                value: newValue
             });
-            if (newValue === undefined) { return; }
-
-            try {
-                await sendEdit({
-                    path: item.ownerNode.folderName,
-                    action: 'modify',
-                    target: 'property',
-                    property: item.propKey,
-                    value: newValue
-                });
-                propertiesPanel.update(item.ownerNode);
-                vscode.window.showInformationMessage(`Updated ${item.propKey}`);
-            } catch (err: any) {
-                vscode.window.showErrorMessage('Edit failed: ' + err.message);
-            }
-        })
-    );
-
+            propertiesPanel.update(item.ownerNode);
+            vscode.window.showInformationMessage(`Updated ${item.propKey}`);
+        }
+        catch (err) {
+            vscode.window.showErrorMessage('Edit failed: ' + err.message);
+        }
+    }));
     // --- Open script in editor (double-click or context menu) ---
-    context.subscriptions.push(
-        vscode.commands.registerCommand('bst.openScript', async (node: FileNode) => {
-            if (!node?.scriptPath) { return; }
-            const doc = await vscode.workspace.openTextDocument(vscode.Uri.file(node.scriptPath));
-            await vscode.window.showTextDocument(doc);
-        })
-    );
-
+    context.subscriptions.push(vscode.commands.registerCommand('bst.openScript', async (node) => {
+        if (!node?.scriptPath) {
+            return;
+        }
+        const doc = await vscode.workspace.openTextDocument(vscode.Uri.file(node.scriptPath));
+        await vscode.window.showTextDocument(doc);
+    }));
     // --- Save script back to backend ---
-    context.subscriptions.push(
-        vscode.commands.registerCommand('bst.saveScript', async () => {
-            const editor = vscode.window.activeTextEditor;
-            if (!editor) { return; }
-
-            const filePath = editor.document.uri.fsPath;
-            const node = fileProvider.findNodeByScriptPath(filePath);
-            if (!node) {
-                vscode.window.showWarningMessage('This file is not part of the current BST project');
-                return;
-            }
-
-            const source = editor.document.getText();
-            try {
-                await sendEdit({
-                    path: node.folderName,
-                    action: 'modify',
-                    target: 'script',
-                    value: source
-                });
-                vscode.window.showInformationMessage('Script saved');
-            } catch (err: any) {
-                vscode.window.showErrorMessage('Save failed: ' + err.message);
-            }
-        })
-    );
-
+    context.subscriptions.push(vscode.commands.registerCommand('bst.saveScript', async () => {
+        const editor = vscode.window.activeTextEditor;
+        if (!editor) {
+            return;
+        }
+        const filePath = editor.document.uri.fsPath;
+        const node = fileProvider.findNodeByScriptPath(filePath);
+        if (!node) {
+            vscode.window.showWarningMessage('This file is not part of the current BST project');
+            return;
+        }
+        const source = editor.document.getText();
+        try {
+            await sendEdit({
+                path: node.folderName,
+                action: 'modify',
+                target: 'script',
+                value: source
+            });
+            vscode.window.showInformationMessage('Script saved');
+        }
+        catch (err) {
+            vscode.window.showErrorMessage('Save failed: ' + err.message);
+        }
+    }));
     // --- Delete instance ---
-    context.subscriptions.push(
-        vscode.commands.registerCommand('bst.deleteInstance', async (node: FileNode) => {
-            if (!node) { return; }
-            const confirm = await vscode.window.showWarningMessage(
-                `Delete "${node.label}"?`, { modal: true }, 'Delete'
-            );
-            if (confirm !== 'Delete') { return; }
-
-            try {
-                await sendEdit({ path: node.folderName, action: 'delete', target: 'instance' });
-                await refreshFileTree();
-                propertiesPanel.clear();
-                vscode.window.showInformationMessage(`Deleted ${node.label}`);
-            } catch (err: any) {
-                vscode.window.showErrorMessage('Delete failed: ' + err.message);
-            }
-        })
-    );
-
+    context.subscriptions.push(vscode.commands.registerCommand('bst.deleteInstance', async (node) => {
+        if (!node) {
+            return;
+        }
+        const confirm = await vscode.window.showWarningMessage(`Delete "${node.label}"?`, { modal: true }, 'Delete');
+        if (confirm !== 'Delete') {
+            return;
+        }
+        try {
+            await sendEdit({ path: node.folderName, action: 'delete', target: 'instance' });
+            await refreshFileTree();
+            propertiesPanel.clear();
+            vscode.window.showInformationMessage(`Deleted ${node.label}`);
+        }
+        catch (err) {
+            vscode.window.showErrorMessage('Delete failed: ' + err.message);
+        }
+    }));
     // --- Close project ---
-    context.subscriptions.push(
-        vscode.commands.registerCommand('bst.closeProject', async () => {
-            try {
-                await sendCliCommand('close-project');
-                fileProvider.clear();
-                propertiesPanel.clear();
-                vscode.window.showInformationMessage('Project closed');
-            } catch (err: any) {
-                vscode.window.showErrorMessage('Close failed: ' + err.message);
-            }
-        })
-    );
-
+    context.subscriptions.push(vscode.commands.registerCommand('bst.closeProject', async () => {
+        try {
+            await sendCliCommand('close-project');
+            fileProvider.clear();
+            propertiesPanel.clear();
+            vscode.window.showInformationMessage('Project closed');
+        }
+        catch (err) {
+            vscode.window.showErrorMessage('Close failed: ' + err.message);
+        }
+    }));
     // --- Refresh file tree ---
-    context.subscriptions.push(
-        vscode.commands.registerCommand('bst.refresh', async () => {
-            try {
-                await refreshFileTree();
-            } catch (err: any) {
-                vscode.window.showErrorMessage('Refresh failed: ' + err.message);
-            }
-        })
-    );
-
+    context.subscriptions.push(vscode.commands.registerCommand('bst.refresh', async () => {
+        try {
+            await refreshFileTree();
+        }
+        catch (err) {
+            vscode.window.showErrorMessage('Refresh failed: ' + err.message);
+        }
+    }));
     // --- Open project selector (shown when connected but no project open) ---
-    context.subscriptions.push(
-        vscode.commands.registerCommand('bst.selectProject', async () => {
-            try {
-                await checkAndLoadProject();
-            } catch (err: any) {
-                vscode.window.showErrorMessage('Failed to load project: ' + err.message);
-            }
-        })
-    );
+    context.subscriptions.push(vscode.commands.registerCommand('bst.selectProject', async () => {
+        try {
+            await checkAndLoadProject();
+        }
+        catch (err) {
+            vscode.window.showErrorMessage('Failed to load project: ' + err.message);
+        }
+    }));
 }
-
 // ------------------- Project Loading -------------------
-
 async function checkAndLoadProject() {
     const status = await sendCliCommand('status');
-
     if (!status.projectOpen) {
         const listResp = await sendCliCommand('list-projects');
-        const projects: string[] = listResp.projects ?? [];
-
+        const projects = listResp.projects ?? [];
         if (projects.length === 0) {
             vscode.window.showWarningMessage('No projects found on server');
             fileProvider.showNoProjects();
             return;
         }
-
         const pick = await vscode.window.showQuickPick(projects, {
             placeHolder: 'Select a project to open',
             title: 'Open Project'
         });
-        if (!pick) { return; }
-
+        if (!pick) {
+            return;
+        }
         const openResp = await sendCliCommand('open-project', { name: pick });
         if (openResp.status !== 'opened') {
             vscode.window.showErrorMessage('Failed to open project');
             return;
         }
         vscode.window.showInformationMessage(`Opened project: ${pick}`);
-    } else {
+    }
+    else {
         vscode.window.showInformationMessage(`Resuming project: ${status.currentProject}`);
     }
-
     await refreshFileTree();
 }
-
 async function refreshFileTree() {
     const status = await sendCliCommand('status');
     if (!status.projectOpen || !status.unpackedPath) {
         fileProvider.clear();
         return;
     }
-
-    const unpackedPath = status.unpackedPath as string;
-
+    const unpackedPath = status.unpackedPath;
     // Resolve relative path — backend may return "./unpacked"
     const resolvedPath = path.isAbsolute(unpackedPath)
         ? unpackedPath
-        : path.resolve(unpackedPath);   // resolved relative to cwd of the extension host
-
+        : path.resolve(unpackedPath); // resolved relative to cwd of the extension host
     if (!fs.existsSync(resolvedPath)) {
         vscode.window.showWarningMessage(`Unpacked path does not exist: ${resolvedPath}`);
         fileProvider.clear();
         return;
     }
-
     const tree = buildTreeFromDisk(resolvedPath);
     fileProvider.refresh(tree, resolvedPath);
 }
-
-// ------------------- Build file tree from unpacked folder -------------------
-
-interface DiskEntry {
-    name: string;
-    className: string;
-    folderName: string;     // relative folder segment, e.g. "Part.Part.abc-123"
-    fullPath: string;
-    hasScript: boolean;
-    children: DiskEntry[];
-}
-
-function buildTreeFromDisk(rootPath: string): DiskEntry[] {
-    if (!fs.existsSync(rootPath)) { return []; }
-
-    const entries: DiskEntry[] = [];
-
-    let items: fs.Dirent[];
-    try {
-        items = fs.readdirSync(rootPath, { withFileTypes: true });
-    } catch {
+function buildTreeFromDisk(rootPath) {
+    if (!fs.existsSync(rootPath)) {
         return [];
     }
-
+    const entries = [];
+    let items;
+    try {
+        items = fs.readdirSync(rootPath, { withFileTypes: true });
+    }
+    catch {
+        return [];
+    }
     for (const item of items) {
-        if (!item.isDirectory()) { continue; }
-
+        if (!item.isDirectory()) {
+            continue;
+        }
         const folderName = item.name;
-
         // Skip the project metadata folder / any folder that isn't Name.ClassName.GUID
         const parts = folderName.split('.');
-        if (parts.length < 3) { continue; }
-
+        if (parts.length < 3) {
+            continue;
+        }
         const instanceName = parts[0];
         const className = parts.slice(1, parts.length - 1).join('.'); // handle dots in class names
         const fullPath = path.join(rootPath, folderName);
         const hasScript = fs.existsSync(path.join(fullPath, 'code.lua'));
         const children = buildTreeFromDisk(fullPath);
-
         entries.push({ name: instanceName, className, folderName, fullPath, hasScript, children });
     }
-
     // Sort: folders first, then by name
     entries.sort((a, b) => {
-        if (a.children.length > 0 && b.children.length === 0) { return -1; }
-        if (a.children.length === 0 && b.children.length > 0) { return 1; }
+        if (a.children.length > 0 && b.children.length === 0) {
+            return -1;
+        }
+        if (a.children.length === 0 && b.children.length > 0) {
+            return 1;
+        }
         return a.name.localeCompare(b.name);
     });
-
     return entries;
 }
-
 // ------------------- Deactivation -------------------
-
-export function deactivate() {
-    if (ws) { ws.close(); }
+function deactivate() {
+    if (ws) {
+        ws.close();
+    }
 }
-
 // ------------------- Icon mapping -------------------
-
-const CLASS_ICONS: Record<string, string> = {
+const CLASS_ICONS = {
     Part: 'symbol-namespace',
     MeshPart: 'symbol-namespace',
     UnionOperation: 'symbol-namespace',
@@ -415,50 +403,46 @@ const CLASS_ICONS: Record<string, string> = {
     Lighting: 'light-bulb',
     Players: 'person',
 };
-
-function getIconForClass(className: string, hasScript: boolean, hasChildren: boolean): vscode.ThemeIcon {
-    if (hasScript) { return new vscode.ThemeIcon('file-code', new vscode.ThemeColor('charts.green')); }
+function getIconForClass(className, hasScript, hasChildren) {
+    if (hasScript) {
+        return new vscode.ThemeIcon('file-code', new vscode.ThemeColor('charts.green'));
+    }
     const iconId = CLASS_ICONS[className];
-    if (iconId) { return new vscode.ThemeIcon(iconId); }
-    if (hasChildren) { return new vscode.ThemeIcon('folder'); }
+    if (iconId) {
+        return new vscode.ThemeIcon(iconId);
+    }
+    if (hasChildren) {
+        return new vscode.ThemeIcon('folder');
+    }
     return new vscode.ThemeIcon('symbol-misc');
 }
-
 // ------------------- File Explorer -------------------
-
 class FileNode extends vscode.TreeItem {
-    children: FileNode[];
-    className: string;
-    folderName: string;
-    fullPath: string;
-    scriptPath?: string;
-
-    constructor(entry: DiskEntry) {
+    children;
+    className;
+    folderName;
+    fullPath;
+    scriptPath;
+    constructor(entry) {
         const hasChildren = entry.children.length > 0;
-        super(
-            entry.name,
-            hasChildren
-                ? vscode.TreeItemCollapsibleState.Collapsed
-                : vscode.TreeItemCollapsibleState.None
-        );
-
+        super(entry.name, hasChildren
+            ? vscode.TreeItemCollapsibleState.Collapsed
+            : vscode.TreeItemCollapsibleState.None);
         this.className = entry.className;
         this.folderName = entry.folderName;
         this.fullPath = entry.fullPath;
         this.children = entry.children.map(c => new FileNode(c));
         this.description = entry.className;
         this.tooltip = `${entry.name} (${entry.className})`;
-
         // Context value drives which inline buttons appear in package.json
         if (entry.hasScript) {
             this.contextValue = 'bstInstance_script';
             this.scriptPath = path.join(entry.fullPath, 'code.lua');
-        } else {
+        }
+        else {
             this.contextValue = 'bstInstance';
         }
-
         this.iconPath = getIconForClass(entry.className, entry.hasScript, hasChildren);
-
         // Double-click on a script node opens it; single-click on anything selects it
         // Selection is handled via onDidChangeSelection on the TreeView.
         // For script nodes we set a command so double-click opens the file.
@@ -473,89 +457,86 @@ class FileNode extends vscode.TreeItem {
         // which fires onDidChangeSelection to populate the properties panel.
     }
 }
-
 /** Placeholder item shown when not connected or no project */
 class PlaceholderNode extends vscode.TreeItem {
-    constructor(label: string, description?: string) {
+    constructor(label, description) {
         super(label, vscode.TreeItemCollapsibleState.None);
         this.description = description;
         this.iconPath = new vscode.ThemeIcon('info');
         this.contextValue = 'placeholder';
     }
 }
-
-type FileTreeItem = FileNode | PlaceholderNode;
-
-class FileProvider implements vscode.TreeDataProvider<FileTreeItem> {
-    private _onDidChangeTreeData = new vscode.EventEmitter<FileTreeItem | undefined | null>();
-    readonly onDidChangeTreeData = this._onDidChangeTreeData.event;
-
-    private roots: FileTreeItem[] = [];
-    private _connected = false;
-
-    getTreeItem(element: FileTreeItem): vscode.TreeItem {
+class FileProvider {
+    _onDidChangeTreeData = new vscode.EventEmitter();
+    onDidChangeTreeData = this._onDidChangeTreeData.event;
+    roots = [];
+    _connected = false;
+    getTreeItem(element) {
         return element;
     }
-
-    getChildren(element?: FileTreeItem): FileTreeItem[] {
-        if (!element) { return this.roots; }
-        if (element instanceof FileNode) { return element.children; }
+    getChildren(element) {
+        if (!element) {
+            return this.roots;
+        }
+        if (element instanceof FileNode) {
+            return element.children;
+        }
         return [];
     }
-
-    setConnected(val: boolean) {
+    setConnected(val) {
         this._connected = val;
         if (!val) {
             this.roots = [new PlaceholderNode('Not connected', 'Click Connect in the toolbar')];
             this._onDidChangeTreeData.fire(undefined);
         }
     }
-
     showNoProjects() {
         this.roots = [new PlaceholderNode('No projects found', 'Add .rbxl files to ./projects')];
         this._onDidChangeTreeData.fire(undefined);
     }
-
-    refresh(entries: DiskEntry[], _unpackedPath: string) {
+    refresh(entries, _unpackedPath) {
         if (entries.length === 0) {
             this.roots = [new PlaceholderNode('Project is empty')];
-        } else {
+        }
+        else {
             this.roots = entries.map(e => new FileNode(e));
         }
         this._onDidChangeTreeData.fire(undefined);
     }
-
     clear() {
         if (this._connected) {
             this.roots = [new PlaceholderNode('No project open', 'Use "Select Project" to open one')];
-        } else {
+        }
+        else {
             this.roots = [new PlaceholderNode('Not connected', 'Click Connect in the toolbar')];
         }
         this._onDidChangeTreeData.fire(undefined);
     }
-
-    findNodeByScriptPath(fsPath: string): FileNode | undefined {
-        const search = (nodes: FileTreeItem[]): FileNode | undefined => {
+    findNodeByScriptPath(fsPath) {
+        const search = (nodes) => {
             for (const n of nodes) {
-                if (!(n instanceof FileNode)) { continue; }
-                if (n.scriptPath === fsPath) { return n; }
+                if (!(n instanceof FileNode)) {
+                    continue;
+                }
+                if (n.scriptPath === fsPath) {
+                    return n;
+                }
                 const found = search(n.children);
-                if (found) { return found; }
+                if (found) {
+                    return found;
+                }
             }
             return undefined;
         };
         return search(this.roots);
     }
 }
-
 // ------------------- Properties Panel -------------------
-
 class PropertyItem extends vscode.TreeItem {
-    propKey?: string;
-    propValue?: string;
-    ownerNode?: FileNode;
-
-    constructor(label: string, opts?: { propKey: string; propValue: string; ownerNode: FileNode }) {
+    propKey;
+    propValue;
+    ownerNode;
+    constructor(label, opts) {
         super(label, vscode.TreeItemCollapsibleState.None);
         if (opts) {
             this.propKey = opts.propKey;
@@ -567,10 +548,9 @@ class PropertyItem extends vscode.TreeItem {
         }
     }
 }
-
 /** Parse a flat YAML file without a library — handles quoted and unquoted string values */
-function parseSimpleYaml(raw: string): Record<string, string> {
-    const result: Record<string, string> = {};
+function parseSimpleYaml(raw) {
+    const result = {};
     for (const line of raw.split(/\r?\n/)) {
         // Match: key: value  OR  key: 'value'  OR  key: "value"
         const match = line.match(/^([A-Za-z_][A-Za-z0-9_]*):\s*(['"]?)(.*)(\2)\s*$/);
@@ -581,36 +561,30 @@ function parseSimpleYaml(raw: string): Record<string, string> {
     }
     return result;
 }
-
-class PropertiesPanel implements vscode.TreeDataProvider<PropertyItem> {
-    private _onDidChangeTreeData = new vscode.EventEmitter<PropertyItem | undefined | null>();
-    readonly onDidChangeTreeData = this._onDidChangeTreeData.event;
-
-    private items: PropertyItem[] = [];
-
-    getTreeItem(element: PropertyItem): vscode.TreeItem { return element; }
-    getChildren(): PropertyItem[] { return this.items; }
-
-    update(node: FileNode) {
+class PropertiesPanel {
+    _onDidChangeTreeData = new vscode.EventEmitter();
+    onDidChangeTreeData = this._onDidChangeTreeData.event;
+    items = [];
+    getTreeItem(element) { return element; }
+    getChildren() { return this.items; }
+    update(node) {
         this.items = [];
-
         // Header section
         const nameItem = new PropertyItem(`${node.label}`);
         nameItem.description = node.className;
         nameItem.iconPath = getIconForClass(node.className, !!node.scriptPath, node.children.length > 0);
         nameItem.tooltip = `${node.label} (${node.className})`;
         this.items.push(nameItem);
-
         // Read & display properties from YAML
         const propsFile = path.join(node.fullPath, 'properties.yaml');
         if (fs.existsSync(propsFile)) {
             try {
                 const raw = fs.readFileSync(propsFile, 'utf-8');
                 const props = parseSimpleYaml(raw);
-
                 if (Object.keys(props).length === 0) {
                     this.items.push(new PropertyItem('(no properties)'));
-                } else {
+                }
+                else {
                     for (const [key, value] of Object.entries(props)) {
                         this.items.push(new PropertyItem(key, {
                             propKey: key,
@@ -619,13 +593,14 @@ class PropertiesPanel implements vscode.TreeDataProvider<PropertyItem> {
                         }));
                     }
                 }
-            } catch {
+            }
+            catch {
                 this.items.push(new PropertyItem('(error reading properties.yaml)'));
             }
-        } else {
+        }
+        else {
             this.items.push(new PropertyItem('(no properties.yaml found)'));
         }
-
         // Script shortcut
         if (node.scriptPath) {
             const scriptItem = new PropertyItem('Open Script');
@@ -638,12 +613,11 @@ class PropertiesPanel implements vscode.TreeDataProvider<PropertyItem> {
             };
             this.items.push(scriptItem);
         }
-
         this._onDidChangeTreeData.fire(undefined);
     }
-
     clear() {
         this.items = [];
         this._onDidChangeTreeData.fire(undefined);
     }
 }
+//# sourceMappingURL=extension.js.map

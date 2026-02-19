@@ -1,21 +1,136 @@
 {
-  "name": "better-studio-tools",
+  "name": "bst-vscode",
   "displayName": "Better Studio Tools",
-  "description": "The VS Code client for Better Studio Tools",
+  "description": "Custom file explorer + properties panel with WebSocket integration",
   "version": "0.0.1",
+  "publisher": "Anthony-Maxwell1",
   "engines": {
-    "vscode": "^1.109.0"
+    "vscode": "^1.80.0"
   },
-  "categories": [
-    "Other"
-  ],
   "activationEvents": [],
   "main": "./out/extension.js",
   "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "betterStudio",
+          "title": "Better Studio",
+          "icon": "$(rocket)"
+        }
+      ]
+    },
+    "views": {
+      "betterStudio": [
+        {
+          "id": "filePanel",
+          "name": "Hierarchy",
+          "when": "true"
+        },
+        {
+          "id": "propertiesPanel",
+          "name": "Properties",
+          "when": "true"
+        }
+      ]
+    },
     "commands": [
       {
-        "command": "better-studio-tools.helloWorld",
-        "title": "Hello World"
+        "command": "bst.connect",
+        "title": "Connect to Server",
+        "icon": "$(plug)"
+      },
+      {
+        "command": "bst.disconnect",
+        "title": "Disconnect",
+        "icon": "$(close)"
+      },
+      {
+        "command": "bst.refresh",
+        "title": "Refresh",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "bst.selectProject",
+        "title": "Select Project",
+        "icon": "$(folder-opened)"
+      },
+      {
+        "command": "bst.closeProject",
+        "title": "Close Project",
+        "icon": "$(folder)"
+      },
+      {
+        "command": "bst.openScript",
+        "title": "Open Script",
+        "icon": "$(file-code)"
+      },
+      {
+        "command": "bst.saveScript",
+        "title": "BST: Save Script to Backend"
+      },
+      {
+        "command": "bst.deleteInstance",
+        "title": "Delete Instance",
+        "icon": "$(trash)"
+      },
+      {
+        "command": "bst.editProperty",
+        "title": "Edit Property",
+        "icon": "$(edit)"
+      }
+    ],
+    "menus": {
+      "view/title": [
+        {
+          "command": "bst.connect",
+          "when": "view == filePanel && !bst.connected",
+          "group": "navigation@1"
+        },
+        {
+          "command": "bst.disconnect",
+          "when": "view == filePanel && bst.connected",
+          "group": "navigation@1"
+        },
+        {
+          "command": "bst.selectProject",
+          "when": "view == filePanel && bst.connected",
+          "group": "navigation@2"
+        },
+        {
+          "command": "bst.refresh",
+          "when": "view == filePanel && bst.connected",
+          "group": "navigation@3"
+        },
+        {
+          "command": "bst.closeProject",
+          "when": "view == filePanel && bst.connected",
+          "group": "navigation@4"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "bst.openScript",
+          "when": "view == filePanel && viewItem == bstInstance_script",
+          "group": "inline@1"
+        },
+        {
+          "command": "bst.deleteInstance",
+          "when": "view == filePanel && (viewItem == bstInstance || viewItem == bstInstance_script)",
+          "group": "inline@2"
+        },
+        {
+          "command": "bst.editProperty",
+          "when": "view == propertiesPanel && viewItem == bstProperty",
+          "group": "inline@1"
+        }
+      ]
+    },
+    "keybindings": [
+      {
+        "command": "bst.saveScript",
+        "key": "ctrl+s",
+        "mac": "cmd+s",
+        "when": "editorTextFocus && resourceExtname == .lua"
       }
     ]
   },
@@ -28,13 +143,17 @@
     "test": "vscode-test"
   },
   "devDependencies": {
-    "@types/vscode": "^1.109.0",
     "@types/mocha": "^10.0.10",
     "@types/node": "22.x",
-    "typescript-eslint": "^8.54.0",
+    "@types/vscode": "^1.100.0",
+    "@types/ws": "^8.18.1",
+    "@vscode/test-cli": "^0.0.12",
+    "@vscode/test-electron": "^2.5.2",
     "eslint": "^9.39.2",
     "typescript": "^5.9.3",
-    "@vscode/test-cli": "^0.0.12",
-    "@vscode/test-electron": "^2.5.2"
+    "typescript-eslint": "^8.54.0"
+  },
+  "dependencies": {
+    "ws": "^8.19.0"
   }
 }
