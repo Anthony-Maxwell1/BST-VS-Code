@@ -65,10 +65,6 @@
         "icon": "$(file-code)"
       },
       {
-        "command": "bst.saveScript",
-        "title": "BST: Save Script to Backend"
-      },
-      {
         "command": "bst.deleteInstance",
         "title": "Delete Instance",
         "icon": "$(trash)"
@@ -124,15 +120,7 @@
           "group": "inline@1"
         }
       ]
-    },
-    "keybindings": [
-      {
-        "command": "bst.saveScript",
-        "key": "ctrl+s",
-        "mac": "cmd+s",
-        "when": "editorTextFocus && resourceExtname == .lua"
-      }
-    ]
+    }
   },
   "scripts": {
     "vscode:prepublish": "pnpm run compile",

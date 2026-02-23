@@ -178,7 +178,7 @@ function activate(context) {
         }
         try {
             await sendEdit({
-                path: item.ownerNode.folderName,
+                uuid: item.ownerNode.folderName.split(".")[item.ownerNode.folderName.split(".").length - 1],
                 action: "modify",
                 target: "property",
                 property: item.propKey,
@@ -199,32 +199,6 @@ function activate(context) {
         const doc = await vscode.workspace.openTextDocument(vscode.Uri.file(node.scriptPath));
         await vscode.window.showTextDocument(doc);
     }));
-    // --- Save script back to backend ---
-    context.subscriptions.push(vscode.commands.registerCommand("bst.saveScript", async () => {
-        const editor = vscode.window.activeTextEditor;
-        if (!editor) {
-            return;
-        }
-        const filePath = editor.document.uri.fsPath;
-        const node = fileProvider.findNodeByScriptPath(filePath);
-        if (!node) {
-            vscode.window.showWarningMessage("This file is not part of the current BST project");
-            return;
-        }
-        const source = editor.document.getText();
-        try {
-            await sendEdit({
-                path: node.folderName,
-                action: "modify",
-                target: "script",
-                value: source,
-            });
-            vscode.window.showInformationMessage("Script saved");
-        }
-        catch (err) {
-            vscode.window.showErrorMessage("Save failed: " + err.message);
-        }
-    }));
     // --- Delete instance ---
     context.subscriptions.push(vscode.commands.registerCommand("bst.deleteInstance", async (node) => {
         if (!node) {
@@ -236,7 +210,7 @@ function activate(context) {
         }
         try {
             await sendEdit({
-                path: node.folderName,
+                uuid: node.folderName.split(".")[node.folderName.split(".").length - 1],
                 action: "delete",
                 target: "instance",
             });
