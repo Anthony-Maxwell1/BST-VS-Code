@@ -55,10 +55,10 @@ function generateId() {
 function sendCliCommand(command, args) {
     return new Promise((resolve, reject) => {
         if (!ws || ws.readyState !== ws_1.default.OPEN) {
-            return reject(new Error('WebSocket is not connected'));
+            return reject(new Error("WebSocket is not connected"));
         }
         const id = generateId();
-        const payload = { type: 'cli', command, id };
+        const payload = { type: "cli", command, id };
         if (args) {
             payload.args = args;
         }
@@ -75,16 +75,16 @@ function sendCliCommand(command, args) {
 function sendEdit(args) {
     return new Promise((resolve, reject) => {
         if (!ws || ws.readyState !== ws_1.default.OPEN) {
-            return reject(new Error('WebSocket is not connected'));
+            return reject(new Error("WebSocket is not connected"));
         }
         const id = generateId();
-        const payload = { type: 'edit', id, args };
+        const payload = { type: "edit", id, args };
         pendingRequests.set(id, resolve);
         ws.send(JSON.stringify(payload));
         setTimeout(() => {
             if (pendingRequests.has(id)) {
                 pendingRequests.delete(id);
-                reject(new Error('Edit request timed out'));
+                reject(new Error("Edit request timed out"));
             }
         }, 30_000);
     });
@@ -92,7 +92,7 @@ function sendEdit(args) {
 function handleMessage(raw) {
     try {
         const msg = JSON.parse(raw);
-        if (msg.type === 'response' && msg.id && pendingRequests.has(msg.id)) {
+        if (msg.type === "response" && msg.id && pendingRequests.has(msg.id)) {
             const cb = pendingRequests.get(msg.id);
             pendingRequests.delete(msg.id);
             cb(msg);
@@ -106,54 +106,54 @@ function handleMessage(raw) {
 function activate(context) {
     fileProvider = new FileProvider();
     propertiesPanel = new PropertiesPanel();
-    const fileTreeView = vscode.window.createTreeView('filePanel', {
+    const fileTreeView = vscode.window.createTreeView("filePanel", {
         treeDataProvider: fileProvider,
-        showCollapseAll: true
+        showCollapseAll: true,
     });
     context.subscriptions.push(fileTreeView);
-    context.subscriptions.push(vscode.window.registerTreeDataProvider('propertiesPanel', propertiesPanel));
+    context.subscriptions.push(vscode.window.registerTreeDataProvider("propertiesPanel", propertiesPanel));
     // Handle selection changes in the file tree → update properties
-    context.subscriptions.push(fileTreeView.onDidChangeSelection(e => {
+    context.subscriptions.push(fileTreeView.onDidChangeSelection((e) => {
         if (e.selection.length > 0 && e.selection[0] instanceof FileNode) {
             propertiesPanel.update(e.selection[0]);
         }
     }));
     // --- Connect ---
-    context.subscriptions.push(vscode.commands.registerCommand('bst.connect', async () => {
+    context.subscriptions.push(vscode.commands.registerCommand("bst.connect", async () => {
         if (connected) {
-            vscode.window.showInformationMessage('Already connected');
+            vscode.window.showInformationMessage("Already connected");
             return;
         }
-        ws = new ws_1.default('ws://localhost:5000');
-        ws.on('open', async () => {
+        ws = new ws_1.default("ws://localhost:5000");
+        ws.on("open", async () => {
             connected = true;
-            vscode.window.showInformationMessage('Connected to Better Studio server');
-            vscode.commands.executeCommand('setContext', 'bst.connected', true);
+            vscode.window.showInformationMessage("Connected to Better Studio server");
+            vscode.commands.executeCommand("setContext", "bst.connected", true);
             fileProvider.setConnected(true);
             try {
                 await checkAndLoadProject();
             }
             catch (err) {
-                vscode.window.showErrorMessage('Failed to load project: ' + err.message);
+                vscode.window.showErrorMessage("Failed to load project: " + err.message);
             }
         });
-        ws.on('message', (data) => {
+        ws.on("message", (data) => {
             handleMessage(data.toString());
         });
-        ws.on('error', (err) => {
-            vscode.window.showErrorMessage('WebSocket error: ' + err.message);
+        ws.on("error", (err) => {
+            vscode.window.showErrorMessage("WebSocket error: " + err.message);
         });
-        ws.on('close', () => {
+        ws.on("close", () => {
             connected = false;
-            vscode.commands.executeCommand('setContext', 'bst.connected', false);
+            vscode.commands.executeCommand("setContext", "bst.connected", false);
             fileProvider.setConnected(false);
             fileProvider.clear();
             propertiesPanel.clear();
-            vscode.window.showWarningMessage('Disconnected from Better Studio server');
+            vscode.window.showWarningMessage("Disconnected from Better Studio server");
         });
     }));
     // --- Disconnect ---
-    context.subscriptions.push(vscode.commands.registerCommand('bst.disconnect', () => {
+    context.subscriptions.push(vscode.commands.registerCommand("bst.disconnect", () => {
         if (ws) {
             ws.close();
             ws = undefined;
@@ -162,16 +162,16 @@ function activate(context) {
         fileProvider.setConnected(false);
         fileProvider.clear();
         propertiesPanel.clear();
-        vscode.commands.executeCommand('setContext', 'bst.connected', false);
+        vscode.commands.executeCommand("setContext", "bst.connected", false);
     }));
     // --- Edit a property (called from properties panel inline button) ---
-    context.subscriptions.push(vscode.commands.registerCommand('bst.editProperty', async (item) => {
+    context.subscriptions.push(vscode.commands.registerCommand("bst.editProperty", async (item) => {
         if (!item?.propKey || !item.ownerNode) {
             return;
         }
         const newValue = await vscode.window.showInputBox({
             prompt: `New value for "${item.propKey}"`,
-            value: item.propValue ?? ''
+            value: item.propValue ?? "",
         });
         if (newValue === undefined) {
             return;
@@ -179,20 +179,20 @@ function activate(context) {
         try {
             await sendEdit({
                 path: item.ownerNode.folderName,
-                action: 'modify',
-                target: 'property',
+                action: "modify",
+                target: "property",
                 property: item.propKey,
-                value: newValue
+                value: newValue,
             });
             propertiesPanel.update(item.ownerNode);
             vscode.window.showInformationMessage(`Updated ${item.propKey}`);
         }
         catch (err) {
-            vscode.window.showErrorMessage('Edit failed: ' + err.message);
+            vscode.window.showErrorMessage("Edit failed: " + err.message);
         }
     }));
     // --- Open script in editor (double-click or context menu) ---
-    context.subscriptions.push(vscode.commands.registerCommand('bst.openScript', async (node) => {
+    context.subscriptions.push(vscode.commands.registerCommand("bst.openScript", async (node) => {
         if (!node?.scriptPath) {
             return;
         }
@@ -200,7 +200,7 @@ function activate(context) {
         await vscode.window.showTextDocument(doc);
     }));
     // --- Save script back to backend ---
-    context.subscriptions.push(vscode.commands.registerCommand('bst.saveScript', async () => {
+    context.subscriptions.push(vscode.commands.registerCommand("bst.saveScript", async () => {
         const editor = vscode.window.activeTextEditor;
         if (!editor) {
             return;
@@ -208,94 +208,98 @@ function activate(context) {
         const filePath = editor.document.uri.fsPath;
         const node = fileProvider.findNodeByScriptPath(filePath);
         if (!node) {
-            vscode.window.showWarningMessage('This file is not part of the current BST project');
+            vscode.window.showWarningMessage("This file is not part of the current BST project");
             return;
         }
         const source = editor.document.getText();
         try {
             await sendEdit({
                 path: node.folderName,
-                action: 'modify',
-                target: 'script',
-                value: source
+                action: "modify",
+                target: "script",
+                value: source,
             });
-            vscode.window.showInformationMessage('Script saved');
+            vscode.window.showInformationMessage("Script saved");
         }
         catch (err) {
-            vscode.window.showErrorMessage('Save failed: ' + err.message);
+            vscode.window.showErrorMessage("Save failed: " + err.message);
         }
     }));
     // --- Delete instance ---
-    context.subscriptions.push(vscode.commands.registerCommand('bst.deleteInstance', async (node) => {
+    context.subscriptions.push(vscode.commands.registerCommand("bst.deleteInstance", async (node) => {
         if (!node) {
             return;
         }
-        const confirm = await vscode.window.showWarningMessage(`Delete "${node.label}"?`, { modal: true }, 'Delete');
-        if (confirm !== 'Delete') {
+        const confirm = await vscode.window.showWarningMessage(`Delete "${node.label}"?`, { modal: true }, "Delete");
+        if (confirm !== "Delete") {
             return;
         }
         try {
-            await sendEdit({ path: node.folderName, action: 'delete', target: 'instance' });
+            await sendEdit({
+                path: node.folderName,
+                action: "delete",
+                target: "instance",
+            });
             await refreshFileTree();
             propertiesPanel.clear();
             vscode.window.showInformationMessage(`Deleted ${node.label}`);
         }
         catch (err) {
-            vscode.window.showErrorMessage('Delete failed: ' + err.message);
+            vscode.window.showErrorMessage("Delete failed: " + err.message);
         }
     }));
     // --- Close project ---
-    context.subscriptions.push(vscode.commands.registerCommand('bst.closeProject', async () => {
+    context.subscriptions.push(vscode.commands.registerCommand("bst.closeProject", async () => {
         try {
-            await sendCliCommand('close-project');
+            await sendCliCommand("close-project");
             fileProvider.clear();
             propertiesPanel.clear();
-            vscode.window.showInformationMessage('Project closed');
+            vscode.window.showInformationMessage("Project closed");
         }
         catch (err) {
-            vscode.window.showErrorMessage('Close failed: ' + err.message);
+            vscode.window.showErrorMessage("Close failed: " + err.message);
         }
     }));
     // --- Refresh file tree ---
-    context.subscriptions.push(vscode.commands.registerCommand('bst.refresh', async () => {
+    context.subscriptions.push(vscode.commands.registerCommand("bst.refresh", async () => {
         try {
             await refreshFileTree();
         }
         catch (err) {
-            vscode.window.showErrorMessage('Refresh failed: ' + err.message);
+            vscode.window.showErrorMessage("Refresh failed: " + err.message);
         }
     }));
     // --- Open project selector (shown when connected but no project open) ---
-    context.subscriptions.push(vscode.commands.registerCommand('bst.selectProject', async () => {
+    context.subscriptions.push(vscode.commands.registerCommand("bst.selectProject", async () => {
         try {
             await checkAndLoadProject();
         }
         catch (err) {
-            vscode.window.showErrorMessage('Failed to load project: ' + err.message);
+            vscode.window.showErrorMessage("Failed to load project: " + err.message);
         }
     }));
 }
 // ------------------- Project Loading -------------------
 async function checkAndLoadProject() {
-    const status = await sendCliCommand('status');
+    const status = await sendCliCommand("status");
     if (!status.projectOpen) {
-        const listResp = await sendCliCommand('list-projects');
+        const listResp = await sendCliCommand("list-projects");
         const projects = listResp.projects ?? [];
         if (projects.length === 0) {
-            vscode.window.showWarningMessage('No projects found on server');
+            vscode.window.showWarningMessage("No projects found on server");
             fileProvider.showNoProjects();
             return;
         }
         const pick = await vscode.window.showQuickPick(projects, {
-            placeHolder: 'Select a project to open',
-            title: 'Open Project'
+            placeHolder: "Select a project to open",
+            title: "Open Project",
         });
         if (!pick) {
             return;
         }
-        const openResp = await sendCliCommand('open-project', { name: pick });
-        if (openResp.status !== 'opened') {
-            vscode.window.showErrorMessage('Failed to open project');
+        const openResp = await sendCliCommand("open-project", { name: pick });
+        if (openResp.status !== "opened") {
+            vscode.window.showErrorMessage("Failed to open project");
             return;
         }
         vscode.window.showInformationMessage(`Opened project: ${pick}`);
@@ -306,16 +310,12 @@ async function checkAndLoadProject() {
     await refreshFileTree();
 }
 async function refreshFileTree() {
-    const status = await sendCliCommand('status');
+    const status = await sendCliCommand("status");
     if (!status.projectOpen || !status.unpackedPath) {
         fileProvider.clear();
         return;
     }
-    const unpackedPath = status.unpackedPath;
-    // Resolve relative path — backend may return "./unpacked"
-    const resolvedPath = path.isAbsolute(unpackedPath)
-        ? unpackedPath
-        : path.resolve(unpackedPath); // resolved relative to cwd of the extension host
+    const resolvedPath = status.unpackedPath;
     if (!fs.existsSync(resolvedPath)) {
         vscode.window.showWarningMessage(`Unpacked path does not exist: ${resolvedPath}`);
         fileProvider.clear();
@@ -342,16 +342,23 @@ function buildTreeFromDisk(rootPath) {
         }
         const folderName = item.name;
         // Skip the project metadata folder / any folder that isn't Name.ClassName.GUID
-        const parts = folderName.split('.');
+        const parts = folderName.split(".");
         if (parts.length < 3) {
             continue;
         }
         const instanceName = parts[0];
-        const className = parts.slice(1, parts.length - 1).join('.'); // handle dots in class names
+        const className = parts.slice(1, parts.length - 1).join("."); // handle dots in class names
         const fullPath = path.join(rootPath, folderName);
-        const hasScript = fs.existsSync(path.join(fullPath, 'code.lua'));
+        const hasScript = fs.existsSync(path.join(fullPath, "code.lua"));
         const children = buildTreeFromDisk(fullPath);
-        entries.push({ name: instanceName, className, folderName, fullPath, hasScript, children });
+        entries.push({
+            name: instanceName,
+            className,
+            folderName,
+            fullPath,
+            hasScript,
+            children,
+        });
     }
     // Sort: folders first, then by name
     entries.sort((a, b) => {
@@ -373,48 +380,48 @@ function deactivate() {
 }
 // ------------------- Icon mapping -------------------
 const CLASS_ICONS = {
-    Part: 'symbol-namespace',
-    MeshPart: 'symbol-namespace',
-    UnionOperation: 'symbol-namespace',
-    Model: 'folder',
-    Folder: 'folder',
-    Script: 'file-code',
-    LocalScript: 'file-code',
-    ModuleScript: 'file-code',
-    RemoteEvent: 'symbol-event',
-    RemoteFunction: 'symbol-method',
-    BindableEvent: 'symbol-event',
-    BindableFunction: 'symbol-method',
-    StringValue: 'symbol-string',
-    IntValue: 'symbol-numeric',
-    NumberValue: 'symbol-numeric',
-    BoolValue: 'symbol-boolean',
-    ObjectValue: 'symbol-object',
-    Configuration: 'gear',
-    Workspace: 'layout',
-    ReplicatedStorage: 'database',
-    ServerStorage: 'server',
-    ServerScriptService: 'server-process',
-    StarterGui: 'browser',
-    StarterPack: 'package',
-    StarterPlayer: 'person',
-    Teams: 'organization',
-    SoundService: 'unmute',
-    Lighting: 'light-bulb',
-    Players: 'person',
+    Part: "symbol-namespace",
+    MeshPart: "symbol-namespace",
+    UnionOperation: "symbol-namespace",
+    Model: "folder",
+    Folder: "folder",
+    Script: "file-code",
+    LocalScript: "file-code",
+    ModuleScript: "file-code",
+    RemoteEvent: "symbol-event",
+    RemoteFunction: "symbol-method",
+    BindableEvent: "symbol-event",
+    BindableFunction: "symbol-method",
+    StringValue: "symbol-string",
+    IntValue: "symbol-numeric",
+    NumberValue: "symbol-numeric",
+    BoolValue: "symbol-boolean",
+    ObjectValue: "symbol-object",
+    Configuration: "gear",
+    Workspace: "layout",
+    ReplicatedStorage: "database",
+    ServerStorage: "server",
+    ServerScriptService: "server-process",
+    StarterGui: "browser",
+    StarterPack: "package",
+    StarterPlayer: "person",
+    Teams: "organization",
+    SoundService: "unmute",
+    Lighting: "light-bulb",
+    Players: "person",
 };
 function getIconForClass(className, hasScript, hasChildren) {
     if (hasScript) {
-        return new vscode.ThemeIcon('file-code', new vscode.ThemeColor('charts.green'));
+        return new vscode.ThemeIcon("file-code", new vscode.ThemeColor("charts.green"));
     }
     const iconId = CLASS_ICONS[className];
     if (iconId) {
         return new vscode.ThemeIcon(iconId);
     }
     if (hasChildren) {
-        return new vscode.ThemeIcon('folder');
+        return new vscode.ThemeIcon("folder");
     }
-    return new vscode.ThemeIcon('symbol-misc');
+    return new vscode.ThemeIcon("symbol-misc");
 }
 // ------------------- File Explorer -------------------
 class FileNode extends vscode.TreeItem {
@@ -431,16 +438,16 @@ class FileNode extends vscode.TreeItem {
         this.className = entry.className;
         this.folderName = entry.folderName;
         this.fullPath = entry.fullPath;
-        this.children = entry.children.map(c => new FileNode(c));
+        this.children = entry.children.map((c) => new FileNode(c));
         this.description = entry.className;
         this.tooltip = `${entry.name} (${entry.className})`;
         // Context value drives which inline buttons appear in package.json
         if (entry.hasScript) {
-            this.contextValue = 'bstInstance_script';
-            this.scriptPath = path.join(entry.fullPath, 'code.lua');
+            this.contextValue = "bstInstance_script";
+            this.scriptPath = path.join(entry.fullPath, "code.lua");
         }
         else {
-            this.contextValue = 'bstInstance';
+            this.contextValue = "bstInstance";
         }
         this.iconPath = getIconForClass(entry.className, entry.hasScript, hasChildren);
         // Double-click on a script node opens it; single-click on anything selects it
@@ -448,9 +455,9 @@ class FileNode extends vscode.TreeItem {
         // For script nodes we set a command so double-click opens the file.
         if (entry.hasScript) {
             this.command = {
-                command: 'bst.openScript',
-                title: 'Open Script',
-                arguments: [this]
+                command: "bst.openScript",
+                title: "Open Script",
+                arguments: [this],
             };
         }
         // Non-script nodes have no command so single-click just selects them,
@@ -462,8 +469,8 @@ class PlaceholderNode extends vscode.TreeItem {
     constructor(label, description) {
         super(label, vscode.TreeItemCollapsibleState.None);
         this.description = description;
-        this.iconPath = new vscode.ThemeIcon('info');
-        this.contextValue = 'placeholder';
+        this.iconPath = new vscode.ThemeIcon("info");
+        this.contextValue = "placeholder";
     }
 }
 class FileProvider {
@@ -486,29 +493,37 @@ class FileProvider {
     setConnected(val) {
         this._connected = val;
         if (!val) {
-            this.roots = [new PlaceholderNode('Not connected', 'Click Connect in the toolbar')];
+            this.roots = [
+                new PlaceholderNode("Not connected", "Click Connect in the toolbar"),
+            ];
             this._onDidChangeTreeData.fire(undefined);
         }
     }
     showNoProjects() {
-        this.roots = [new PlaceholderNode('No projects found', 'Add .rbxl files to ./projects')];
+        this.roots = [
+            new PlaceholderNode("No projects found", "Add .rbxl files to ./projects"),
+        ];
         this._onDidChangeTreeData.fire(undefined);
     }
     refresh(entries, _unpackedPath) {
         if (entries.length === 0) {
-            this.roots = [new PlaceholderNode('Project is empty')];
+            this.roots = [new PlaceholderNode("Project is empty")];
         }
         else {
-            this.roots = entries.map(e => new FileNode(e));
+            this.roots = entries.map((e) => new FileNode(e));
         }
         this._onDidChangeTreeData.fire(undefined);
     }
     clear() {
         if (this._connected) {
-            this.roots = [new PlaceholderNode('No project open', 'Use "Select Project" to open one')];
+            this.roots = [
+                new PlaceholderNode("No project open", 'Use "Select Project" to open one'),
+            ];
         }
         else {
-            this.roots = [new PlaceholderNode('Not connected', 'Click Connect in the toolbar')];
+            this.roots = [
+                new PlaceholderNode("Not connected", "Click Connect in the toolbar"),
+            ];
         }
         this._onDidChangeTreeData.fire(undefined);
     }
@@ -544,7 +559,7 @@ class PropertyItem extends vscode.TreeItem {
             this.ownerNode = opts.ownerNode;
             this.description = opts.propValue;
             this.tooltip = `${opts.propKey}: ${opts.propValue}`;
-            this.contextValue = 'bstProperty';
+            this.contextValue = "bstProperty";
         }
     }
 }
@@ -565,8 +580,12 @@ class PropertiesPanel {
     _onDidChangeTreeData = new vscode.EventEmitter();
     onDidChangeTreeData = this._onDidChangeTreeData.event;
     items = [];
-    getTreeItem(element) { return element; }
-    getChildren() { return this.items; }
+    getTreeItem(element) {
+        return element;
+    }
+    getChildren() {
+        return this.items;
+    }
     update(node) {
         this.items = [];
         // Header section
@@ -576,40 +595,40 @@ class PropertiesPanel {
         nameItem.tooltip = `${node.label} (${node.className})`;
         this.items.push(nameItem);
         // Read & display properties from YAML
-        const propsFile = path.join(node.fullPath, 'properties.yaml');
+        const propsFile = path.join(node.fullPath, "properties.yaml");
         if (fs.existsSync(propsFile)) {
             try {
-                const raw = fs.readFileSync(propsFile, 'utf-8');
+                const raw = fs.readFileSync(propsFile, "utf-8");
                 const props = parseSimpleYaml(raw);
                 if (Object.keys(props).length === 0) {
-                    this.items.push(new PropertyItem('(no properties)'));
+                    this.items.push(new PropertyItem("(no properties)"));
                 }
                 else {
                     for (const [key, value] of Object.entries(props)) {
                         this.items.push(new PropertyItem(key, {
                             propKey: key,
                             propValue: value,
-                            ownerNode: node
+                            ownerNode: node,
                         }));
                     }
                 }
             }
             catch {
-                this.items.push(new PropertyItem('(error reading properties.yaml)'));
+                this.items.push(new PropertyItem("(error reading properties.yaml)"));
             }
         }
         else {
-            this.items.push(new PropertyItem('(no properties.yaml found)'));
+            this.items.push(new PropertyItem("(no properties.yaml found)"));
         }
         // Script shortcut
         if (node.scriptPath) {
-            const scriptItem = new PropertyItem('Open Script');
-            scriptItem.iconPath = new vscode.ThemeIcon('file-code');
-            scriptItem.tooltip = 'Open script in editor';
+            const scriptItem = new PropertyItem("Open Script");
+            scriptItem.iconPath = new vscode.ThemeIcon("file-code");
+            scriptItem.tooltip = "Open script in editor";
             scriptItem.command = {
-                command: 'bst.openScript',
-                title: 'Open Script',
-                arguments: [node]
+                command: "bst.openScript",
+                title: "Open Script",
+                arguments: [node],
             };
             this.items.push(scriptItem);
         }
