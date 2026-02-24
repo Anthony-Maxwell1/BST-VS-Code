@@ -386,6 +386,19 @@ const CLASS_ICONS = {
     Lighting: "Lighting",
     Players: "Players",
 };
+const HIDDEN_CLASSES = [
+    "AssetService",
+    "AvatarSettings",
+    "CollectionService",
+    "ContextActionService",
+    "CookiesService",
+    "GSGDictionaryService",
+    "DataStoreService",
+    // ...
+];
+function checkHidden(className) {
+    return HIDDEN_CLASSES.includes(className);
+}
 function getIconForClass(className, hasScript, hasChildren) {
     if (hasScript) {
         return new vscode.ThemeIcon("file-code", new vscode.ThemeColor("charts.green"));

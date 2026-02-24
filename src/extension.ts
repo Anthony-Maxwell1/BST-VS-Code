@@ -457,6 +457,21 @@ const CLASS_ICONS: Record<string, string> = {
   Players: "Players",
 };
 
+const HIDDEN_CLASSES: string[] = [
+  "AssetService",
+  "AvatarSettings",
+  "CollectionService",
+  "ContextActionService",
+  "CookiesService",
+  "GSGDictionaryService",
+  "DataStoreService",
+  // ...
+];
+
+function checkHidden(className: string): boolean {
+  return HIDDEN_CLASSES.includes(className);
+}
+
 function getIconForClass(
   className: string,
   hasScript: boolean,
