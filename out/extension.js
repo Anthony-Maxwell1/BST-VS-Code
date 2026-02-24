@@ -43,6 +43,7 @@ const ws_1 = __importDefault(require("ws"));
 const fs = __importStar(require("fs"));
 const path = __importStar(require("path"));
 // ------------------- WebSocket & State -------------------
+let extensionPath;
 let ws;
 let fileProvider;
 let propertiesPanel;
@@ -106,6 +107,7 @@ function handleMessage(raw) {
 function activate(context) {
     fileProvider = new FileProvider();
     propertiesPanel = new PropertiesPanel();
+    extensionPath = context.extensionPath;
     const fileTreeView = vscode.window.createTreeView("filePanel", {
         treeDataProvider: fileProvider,
         showCollapseAll: true,
@@ -354,43 +356,44 @@ function deactivate() {
 }
 // ------------------- Icon mapping -------------------
 const CLASS_ICONS = {
-    Part: "symbol-namespace",
-    MeshPart: "symbol-namespace",
-    UnionOperation: "symbol-namespace",
-    Model: "folder",
-    Folder: "folder",
-    Script: "file-code",
-    LocalScript: "file-code",
-    ModuleScript: "file-code",
-    RemoteEvent: "symbol-event",
-    RemoteFunction: "symbol-method",
-    BindableEvent: "symbol-event",
-    BindableFunction: "symbol-method",
-    StringValue: "symbol-string",
-    IntValue: "symbol-numeric",
-    NumberValue: "symbol-numeric",
-    BoolValue: "symbol-boolean",
-    ObjectValue: "symbol-object",
-    Configuration: "gear",
-    Workspace: "layout",
-    ReplicatedStorage: "database",
-    ServerStorage: "server",
-    ServerScriptService: "server-process",
-    StarterGui: "browser",
-    StarterPack: "package",
-    StarterPlayer: "person",
-    Teams: "organization",
-    SoundService: "unmute",
-    Lighting: "light-bulb",
-    Players: "person",
+    Part: "Part",
+    MeshPart: "MeshPart",
+    UnionOperation: "UnionOperation",
+    Model: "Model",
+    Folder: "Folder",
+    Script: "Script",
+    LocalScript: "LocalScript",
+    ModuleScript: "ModuleScript",
+    RemoteEvent: "RemoteEvent",
+    RemoteFunction: "RemoteFunction",
+    BindableEvent: "BindableEvent",
+    BindableFunction: "BindableFunction",
+    StringValue: "StringValue",
+    IntValue: "IntValue",
+    NumberValue: "NumberValue",
+    BoolValue: "BoolValue",
+    ObjectValue: "ObjectValue",
+    Configuration: "Configuration",
+    Workspace: "Workspace",
+    ReplicatedStorage: "ReplicatedStorage",
+    ServerStorage: "ServerStorage",
+    ServerScriptService: "ServerScriptService",
+    StarterGui: "StarterGui",
+    StarterPack: "StarterPack",
+    StarterPlayer: "StarterPlayer",
+    Teams: "Teams",
+    SoundService: "SoundService",
+    Lighting: "Lighting",
+    Players: "Players",
 };
 function getIconForClass(className, hasScript, hasChildren) {
     if (hasScript) {
         return new vscode.ThemeIcon("file-code", new vscode.ThemeColor("charts.green"));
     }
-    const iconId = CLASS_ICONS[className];
-    if (iconId) {
-        return new vscode.ThemeIcon(iconId);
+    const iconName = CLASS_ICONS[className];
+    if (iconName && extensionPath) {
+        const iconUri = vscode.Uri.file(path.join(extensionPath, "old-studio-icons", `${iconName}.png`));
+        return { light: iconUri, dark: iconUri };
     }
     if (hasChildren) {
         return new vscode.ThemeIcon("folder");
