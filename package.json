@@ -83,6 +83,16 @@
         "command": "bst.editProperty",
         "title": "Edit Property",
         "icon": "$(edit)"
+      },
+      {
+        "command": "bst.installCli",
+        "title": "Install CLI",
+        "icon": "$(plug)"
+      },
+      {
+        "command": "bst.installCore",
+        "title": "Install Core",
+        "icon": "$(plug)"
       }
     ],
     "menus": {

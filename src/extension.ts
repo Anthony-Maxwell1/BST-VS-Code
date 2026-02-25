@@ -3,6 +3,7 @@ import WebSocket from "ws";
 import * as fs from "fs";
 import * as path from "path";
 import * as cp from "child_process";
+import * as os from "os";
 
 // ------------------- WebSocket & State -------------------
 
@@ -111,14 +112,125 @@ export function activate(context: vscode.ExtensionContext) {
       }
       cp.exec("bst run", (err, stdout, stderr) => {
         if (err) {
-          vscode.window.showErrorMessage(
-            "Failed to start server: " + err.message,
-          );
+          // err is usually a ChildProcessError which has a 'code' property
+          const exitCode = (err as any).code; // typecast if needed
+          if (exitCode === 1) {
+            vscode.window.showErrorMessage(
+              "BST Core not installed. Install by running Fetch Core in the command pallete.",
+            );
+          } else {
+            vscode.window.showErrorMessage(
+              `BST Cli might not be installed. Install by running Install CLI in command pallete. Server failed with exit code ${exitCode}: ${err.message}.`,
+            );
+          }
         } else {
           vscode.window.showInformationMessage("Server started");
         }
       });
       serverReady = true;
+    }),
+  );
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand("bst.installCli", async () => {
+      try {
+        const platform = os.platform();
+        const home = os.homedir();
+        let targetDir: string;
+        let exeName: string;
+
+        if (platform === "win32") {
+          targetDir = path.join(home, "AppData", "Local", "bst");
+          exeName = "bst-win.exe";
+        } else if (platform === "darwin") {
+          targetDir = path.join(home, ".bst");
+          exeName = "bst-mac";
+        } else {
+          targetDir = path.join(home, ".bst");
+          exeName = "bst-linux";
+        }
+
+        const exePath = path.join(targetDir, exeName);
+
+        // Create directory if it doesn't exist
+        if (!fs.existsSync(targetDir)) {
+          fs.mkdirSync(targetDir, { recursive: true });
+        }
+
+        // Download binary
+        const binaryUrl = `https://github.com/Anthony-Maxwell1/BST-Cli/releases/latest/download/${exeName}`;
+        console.log(binaryUrl);
+        const res = await fetch(binaryUrl);
+        if (!res.ok) {
+          throw new Error(`Failed to download: ${res.statusText}`);
+        }
+
+        const buffer = Buffer.from(await res.arrayBuffer());
+        const finalExeName = platform === "win32" ? "bst.exe" : "bst";
+        const finalExePath = exePath.replace(exeName, finalExeName);
+        await fs.promises.writeFile(finalExePath, buffer);
+
+        // Make it executable on Unix
+        if (platform !== "win32") {
+          fs.chmodSync(finalExePath, 0o755);
+        }
+
+        vscode.window.showInformationMessage(
+          `bst binary installed to ${finalExePath}`,
+        );
+
+        // Add to PATH
+        if (platform === "win32") {
+          const addToPathCmd = `[Environment]::SetEnvironmentVariable('Path', "$([Environment]::GetEnvironmentVariable('Path', 'User'));${targetDir}", 'User')`; // TODO: FIX, SO PATH ISN'T TRUNCATED
+          cp.exec(
+            addToPathCmd,
+            { shell: "powershell.exe" },
+            (error, stdout, stderr) => {
+              if (error) {
+                vscode.window.showErrorMessage(
+                  `Failed to update PATH: ${stderr}`,
+                );
+              } else {
+                vscode.window.showInformationMessage(
+                  `Added ${targetDir} to PATH. Restart VS Code to apply.`,
+                );
+              }
+            },
+          );
+        } else {
+          // Unix: add to shell profile
+          const shell = process.env.SHELL || "";
+          let profile = path.join(home, ".bashrc"); // default to bash
+          if (shell.includes("zsh")) {
+            profile = path.join(home, ".zshrc");
+          }
+
+          const exportLine = `export PATH="${targetDir}:$PATH"\n`;
+          fs.appendFileSync(profile, exportLine);
+
+          vscode.window.showInformationMessage(
+            `Added ${targetDir} to PATH. Restart terminal or VS Code to apply.`,
+          );
+        }
+      } catch (err: any) {
+        vscode.window.showErrorMessage(
+          `Error installing BST binary: ${err.message}`,
+        );
+      }
+    }),
+  );
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand("bst.installCore", async () => {
+      cp.exec("bst fetch", (err, stdout, stderr) => {
+        if (err) {
+          vscode.window.showErrorMessage(
+            "Failed to install Core: " + err.message,
+          );
+        } else {
+          vscode.window.showInformationMessage("Core installed");
+        }
+      });
     }),
   );
 
