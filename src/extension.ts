@@ -2,6 +2,7 @@ import * as vscode from "vscode";
 import WebSocket from "ws";
 import * as fs from "fs";
 import * as path from "path";
+import * as cp from "child_process";
 
 // ------------------- WebSocket & State -------------------
 
@@ -10,6 +11,7 @@ let ws: WebSocket | undefined;
 let fileProvider: FileProvider;
 let propertiesPanel: PropertiesPanel;
 let connected = false;
+let serverReady = false;
 
 const pendingRequests = new Map<string, (data: any) => void>();
 let nextId = 1;
@@ -99,6 +101,43 @@ export function activate(context: vscode.ExtensionContext) {
       }
     }),
   );
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand("bst.startServer", async () => {
+      serverReady = await checkWebSocketAvailable();
+      if (connected || serverReady) {
+        vscode.window.showInformationMessage("Server already ready");
+        return;
+      }
+      cp.exec("bst run", (err, stdout, stderr) => {
+        if (err) {
+          vscode.window.showErrorMessage(
+            "Failed to start server: " + err.message,
+          );
+        } else {
+          vscode.window.showInformationMessage("Server started");
+        }
+      });
+      serverReady = true;
+    }),
+  );
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand("bst.stopServer", async () => {
+      cp.exec("bst stop", (err, stdout, stderr) => {
+        if (err) {
+          vscode.window.showErrorMessage(
+            "Failed to stop server: " + err.message,
+          );
+        } else {
+          vscode.window.showInformationMessage("Server stopped");
+        }
+      });
+      serverReady = false;
+    }),
+  );
+
+  checkWebSocketAvailable(2000, true);
 
   // --- Connect ---
   context.subscriptions.push(
@@ -347,6 +386,62 @@ async function refreshFileTree() {
   fileProvider.refresh(tree, resolvedPath);
 }
 
+export function checkWebSocketAvailable(
+  timeoutMs = 2000,
+  init = false,
+): Promise<boolean> {
+  const url = "ws://localhost:3000";
+  return new Promise((resolve) => {
+    const ws = new WebSocket(url);
+    let settled = false;
+
+    const timeout = setTimeout(() => {
+      if (!settled) {
+        settled = true;
+        ws.close();
+        resolve(false);
+      }
+    }, timeoutMs);
+
+    ws.onopen = () => {
+      if (settled) {
+        if (init) {
+          setTimeout(() => {
+            checkWebSocketAvailable(timeoutMs, true);
+          }, 1000);
+          serverReady = true;
+          vscode.commands.executeCommand("setContext", "bst.serverReady", true);
+        }
+        return;
+      }
+      settled = true;
+      clearTimeout(timeout);
+      ws.close();
+      resolve(true);
+    };
+
+    ws.onerror = () => {
+      if (settled) {
+        if (init) {
+          setTimeout(() => {
+            checkWebSocketAvailable(timeoutMs, true);
+          }, 1000);
+          serverReady = false;
+          vscode.commands.executeCommand(
+            "setContext",
+            "bst.serverReady",
+            false,
+          );
+        }
+        return;
+      }
+      settled = true;
+      clearTimeout(timeout);
+      resolve(false);
+    };
+  });
+}
+
 // ------------------- Build file tree from unpacked folder -------------------
 
 interface DiskEntry {
@@ -387,6 +482,9 @@ function buildTreeFromDisk(rootPath: string): DiskEntry[] {
 
     const instanceName = parts[0];
     const className = parts.slice(1, parts.length - 1).join("."); // handle dots in class names
+    if (checkHidden(className)) {
+      continue;
+    }
     const fullPath = path.join(rootPath, folderName);
     const hasScript = fs.existsSync(path.join(fullPath, "code.lua"));
     const children = buildTreeFromDisk(fullPath);
@@ -455,6 +553,8 @@ const CLASS_ICONS: Record<string, string> = {
   SoundService: "SoundService",
   Lighting: "Lighting",
   Players: "Players",
+  StarterPlayerScripts: "Folder",
+  StarterCharacterScripts: "Folder",
 };
 
 const HIDDEN_CLASSES: string[] = [
@@ -465,7 +565,7 @@ const HIDDEN_CLASSES: string[] = [
   "CookiesService",
   "GSGDictionaryService",
   "DataStoreService",
-  // ...
+  "VoiceChatService",
 ];
 
 function checkHidden(className: string): boolean {
@@ -474,16 +574,8 @@ function checkHidden(className: string): boolean {
 
 function getIconForClass(
   className: string,
-  hasScript: boolean,
   hasChildren: boolean,
 ): vscode.ThemeIcon | { light: vscode.Uri; dark: vscode.Uri } {
-  if (hasScript) {
-    return new vscode.ThemeIcon(
-      "file-code",
-      new vscode.ThemeColor("charts.green"),
-    );
-  }
-
   const iconName = CLASS_ICONS[className];
   if (iconName && extensionPath) {
     const iconUri = vscode.Uri.file(
@@ -531,11 +623,7 @@ class FileNode extends vscode.TreeItem {
       this.contextValue = "bstInstance";
     }
 
-    this.iconPath = getIconForClass(
-      entry.className,
-      entry.hasScript,
-      hasChildren,
-    );
+    this.iconPath = getIconForClass(entry.className, entry.hasScript);
 
     // Double-click on a script node opens it; single-click on anything selects it
     // Selection is handled via onDidChangeSelection on the TreeView.
@@ -709,11 +797,7 @@ class PropertiesPanel implements vscode.TreeDataProvider<PropertyItem> {
     // Header section
     const nameItem = new PropertyItem(`${node.label}`);
     nameItem.description = node.className;
-    nameItem.iconPath = getIconForClass(
-      node.className,
-      !!node.scriptPath,
-      node.children.length > 0,
-    );
+    nameItem.iconPath = getIconForClass(node.className, !!node.scriptPath);
     nameItem.tooltip = `${node.label} (${node.className})`;
     this.items.push(nameItem);
 

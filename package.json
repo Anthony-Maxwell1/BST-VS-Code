@@ -35,6 +35,16 @@
     },
     "commands": [
       {
+        "command": "bst.startServer",
+        "title": "Start Server",
+        "icon": "$(play)"
+      },
+      {
+        "command": "bst.stopServer",
+        "title": "Stop Server",
+        "icon": "$(stop)"
+      },
+      {
         "command": "bst.connect",
         "title": "Connect to Server",
         "icon": "$(plug)"
@@ -77,6 +87,16 @@
     ],
     "menus": {
       "view/title": [
+        {
+          "command": "bst.startServer",
+          "when": "view == filePanel && !bst.connected && !bst.available",
+          "group": "navigation@1"
+        },
+        {
+          "command": "bst.stopServer",
+          "when": "view == filePanel && !bst.connected && bst.available",
+          "group": "navigation@1"
+        },
         {
           "command": "bst.connect",
           "when": "view == filePanel && !bst.connected",
