@@ -8,6 +8,15 @@ importers:
 
   .:
     dependencies:
+      koffi:
+        specifier: ^2.15.1
+        version: 2.15.1
+      ps-list:
+        specifier: ^9.0.0
+        version: 9.0.0
+      win32-api:
+        specifier: ^26.1.2
+        version: 26.1.2
       ws:
         specifier: ^8.19.0
         version: 8.19.0
@@ -210,6 +219,10 @@ packages:
   '@vscode/test-electron@2.5.2':
     resolution: {integrity: sha512-8ukpxv4wYe0iWMRQU18jhzJOHkeGKbnw7xWRX3Zw1WJA4cEKbHcmmLPdPrPtL6rhDcrlCZN+xKRpv09n4gRHYg==}
     engines: {node: '>=16'}
+
+  '@waiting/shared-types@23.24.0':
+    resolution: {integrity: sha512-E7U3ulMbHiT05Jd8RlepovGeixCQMAdJMkGE83s/JMtCOx0n02Ss7OURLVgV+j06SeHZ52wCBoHfriqlW6Pa3w==}
+    engines: {node: '>=18.12.0'}
 
   acorn-jsx@5.3.2:
     resolution: {integrity: sha512-rq9s+JNhf0IChjtDXxllJ7g41oZk5SlXtp0LHwyA5cejwn7vKmKp4pPri6YEePv2PU65sAsegbXtIinmDFDXgQ==}
@@ -630,6 +643,9 @@ packages:
   keyv@4.5.4:
     resolution: {integrity: sha512-oxVHkHR/EJf2CNXnWxRLW6mg7JyCCUcG0DtEGmL2ctUo1PNTin1PUil+r/+4r5MpVgC/fn1kjsx7mjSujKqIpw==}
 
+  koffi@2.15.1:
+    resolution: {integrity: sha512-mnc0C0crx/xMSljb5s9QbnLrlFHprioFO1hkXyuSuO/QtbpLDa0l/uM21944UfQunMKmp3/r789DTDxVyyH6aA==}
+
   levn@0.4.1:
     resolution: {integrity: sha512-+bT2uH4E5LGE7h/n3evcS/sQlJXCpIp6ym8OWJ5eV6+67Dsql/LaaT7qJBAt2rzfoa/5QBGBhxDix1dMt2kQKQ==}
     engines: {node: '>= 0.8.0'}
@@ -748,6 +764,10 @@ packages:
 
   process-nextick-args@2.0.1:
     resolution: {integrity: sha512-3ouUOpQhtgrbOa17J7+uxOTpITYWaGP7/AhoR3+A+/1e9skrzelGi/dXzEYyvbxubEF6Wn2ypscTKiKJFFn1ag==}
+
+  ps-list@9.0.0:
+    resolution: {integrity: sha512-lxMEoIL/BQlk2KunFzxwUPwMvjFH7x7cmvzSLsSHpyMXl9FFfLUlfKrYwFc4wx/ZaIxxuXC4n8rjQ1CX/tkXVQ==}
+    engines: {node: '>=20'}
 
   punycode@2.3.1:
     resolution: {integrity: sha512-vYt7UD1U9Wg6138shLtLOvdAu+8DsC/ilFtEVHcH+wydcSpNE20AfSOduf6MkRFahL5FY7X1oU7nKVZFtfq8Fg==}
@@ -906,6 +926,14 @@ packages:
     resolution: {integrity: sha512-BLI3Tl1TW3Pvl70l3yq3Y64i+awpwXqsGBYWkkqMtnbXgrMD+yj7rhW0kuEDxzJaYXGjEW5ogapKNMEKNMjibA==}
     engines: {node: '>= 8'}
     hasBin: true
+
+  win32-api@26.1.2:
+    resolution: {integrity: sha512-6pFihEkolpU8PIPk3pbBa/Wn2S9esHAbRrlvRObKRARMdXb2dpe50J5FRApOhK8HCbyI4/uS6qtxZ/hKpr+8Kw==}
+    engines: {node: '>=20.11.0'}
+
+  win32-def@26.1.2:
+    resolution: {integrity: sha512-vk65D1jZt6t0cTpP8fdUPbHobneOKPyYpk8ADIjUTq4aDkfNiHtbIAPqz/bqYABFZqRU7NCREqf5v7EOz3lstg==}
+    engines: {node: '>=18.11.0'}
 
   word-wrap@1.2.5:
     resolution: {integrity: sha512-BN22B5eaMMI9UMtjrGd5g5eCYPpCPDUy0FJXbYsaT5zYxjFOckS53SQDE3pWkVoWpHXVb3BrYcEN4Twa55B5cA==}
@@ -1170,6 +1198,8 @@ snapshots:
       semver: 7.7.4
     transitivePeerDependencies:
       - supports-color
+
+  '@waiting/shared-types@23.24.0': {}
 
   acorn-jsx@5.3.2(acorn@8.15.0):
     dependencies:
@@ -1560,6 +1590,8 @@ snapshots:
     dependencies:
       json-buffer: 3.0.1
 
+  koffi@2.15.1: {}
+
   levn@0.4.1:
     dependencies:
       prelude-ls: 1.2.1
@@ -1692,6 +1724,8 @@ snapshots:
   prelude-ls@1.2.1: {}
 
   process-nextick-args@2.0.1: {}
+
+  ps-list@9.0.0: {}
 
   punycode@2.3.1: {}
 
@@ -1843,6 +1877,15 @@ snapshots:
   which@2.0.2:
     dependencies:
       isexe: 2.0.0
+
+  win32-api@26.1.2:
+    dependencies:
+      win32-def: 26.1.2
+
+  win32-def@26.1.2:
+    dependencies:
+      '@waiting/shared-types': 23.24.0
+      koffi: 2.15.1
 
   word-wrap@1.2.5: {}
 

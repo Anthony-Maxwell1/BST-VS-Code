@@ -4,6 +4,7 @@ import * as fs from "fs";
 import * as path from "path";
 import * as cp from "child_process";
 import * as os from "os";
+import * as controller from "./embed/win.js";
 
 // ------------------- WebSocket & State -------------------
 
@@ -13,6 +14,8 @@ let fileProvider: FileProvider;
 let propertiesPanel: PropertiesPanel;
 let connected = false;
 let serverReady = false;
+let stopAligning = false;
+let alignAbove = true;
 
 const pendingRequests = new Map<string, (data: any) => void>();
 let nextId = 1;
@@ -101,6 +104,13 @@ export function activate(context: vscode.ExtensionContext) {
         propertiesPanel.update(e.selection[0]);
       }
     }),
+  );
+
+  context.subscriptions.push(
+    vscode.window.registerCustomEditorProvider(
+      "robloxViewport.editor",
+      new RobloxViewportProvider(),
+    ),
   );
 
   context.subscriptions.push(
@@ -437,6 +447,77 @@ export function activate(context: vscode.ExtensionContext) {
       }
     }),
   );
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand("robloxViewport.open", async () => {
+      const uri = vscode.Uri.parse("untitled:viewport.rbxviewport");
+      await vscode.commands.executeCommand(
+        "vscode.openWith",
+        uri,
+        "robloxViewport.editor",
+      );
+    }),
+  );
+}
+
+class RobloxViewportProvider implements vscode.CustomTextEditorProvider {
+  async resolveCustomTextEditor(
+    document: vscode.TextDocument,
+    webviewPanel: vscode.WebviewPanel,
+  ): Promise<void> {
+    try {
+      await controller.init();
+    } catch (err) {
+      vscode.window.showErrorMessage("Failed to initialize Studio.");
+      console.error(err);
+      return;
+    }
+
+    webviewPanel.webview.html = `
+      <html>
+      <body style="background:#1e1e1e;color:white;">
+        Roblox Studio Viewport
+      </body>
+      </html>
+    `;
+
+    let stopAligning = false;
+
+    const align = () => {
+      if (stopAligning) return;
+
+      setTimeout(() => {
+        controller.alignStudioToEditor();
+
+        // If the panel is active, show above; otherwise, show below
+        if (webviewPanel.active) {
+          controller.above();
+        } else {
+          controller.below();
+        }
+
+        align();
+      }, 300);
+    };
+
+    stopAligning = false;
+    align();
+
+    // Detect when the tab becomes active or inactive
+    webviewPanel.onDidChangeViewState((e) => {
+      if (e.webviewPanel.active) {
+        controller.above();
+      } else {
+        controller.below();
+      }
+    });
+
+    // Stop aligning when the panel is disposed
+    webviewPanel.onDidDispose(() => {
+      stopAligning = true;
+      controller.below();
+    });
+  }
 }
 
 // ------------------- Project Loading -------------------

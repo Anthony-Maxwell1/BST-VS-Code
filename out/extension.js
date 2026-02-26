@@ -1,50 +1,10 @@
-"use strict";
-var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
-    if (k2 === undefined) k2 = k;
-    var desc = Object.getOwnPropertyDescriptor(m, k);
-    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
-      desc = { enumerable: true, get: function() { return m[k]; } };
-    }
-    Object.defineProperty(o, k2, desc);
-}) : (function(o, m, k, k2) {
-    if (k2 === undefined) k2 = k;
-    o[k2] = m[k];
-}));
-var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
-    Object.defineProperty(o, "default", { enumerable: true, value: v });
-}) : function(o, v) {
-    o["default"] = v;
-});
-var __importStar = (this && this.__importStar) || (function () {
-    var ownKeys = function(o) {
-        ownKeys = Object.getOwnPropertyNames || function (o) {
-            var ar = [];
-            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
-            return ar;
-        };
-        return ownKeys(o);
-    };
-    return function (mod) {
-        if (mod && mod.__esModule) return mod;
-        var result = {};
-        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
-        __setModuleDefault(result, mod);
-        return result;
-    };
-})();
-var __importDefault = (this && this.__importDefault) || function (mod) {
-    return (mod && mod.__esModule) ? mod : { "default": mod };
-};
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.activate = activate;
-exports.checkWebSocketAvailable = checkWebSocketAvailable;
-exports.deactivate = deactivate;
-const vscode = __importStar(require("vscode"));
-const ws_1 = __importDefault(require("ws"));
-const fs = __importStar(require("fs"));
-const path = __importStar(require("path"));
-const cp = __importStar(require("child_process"));
-const os = __importStar(require("os"));
+import * as vscode from "vscode";
+import WebSocket from "ws";
+import * as fs from "fs";
+import * as path from "path";
+import * as cp from "child_process";
+import * as os from "os";
+import * as controller from "./embed/win.js";
 // ------------------- WebSocket & State -------------------
 let extensionPath;
 let ws;
@@ -52,6 +12,8 @@ let fileProvider;
 let propertiesPanel;
 let connected = false;
 let serverReady = false;
+let stopAligning = false;
+let alignAbove = true;
 const pendingRequests = new Map();
 let nextId = 1;
 function generateId() {
@@ -59,7 +21,7 @@ function generateId() {
 }
 function sendCliCommand(command, args) {
     return new Promise((resolve, reject) => {
-        if (!ws || ws.readyState !== ws_1.default.OPEN) {
+        if (!ws || ws.readyState !== WebSocket.OPEN) {
             return reject(new Error("WebSocket is not connected"));
         }
         const id = generateId();
@@ -79,7 +41,7 @@ function sendCliCommand(command, args) {
 }
 function sendEdit(args) {
     return new Promise((resolve, reject) => {
-        if (!ws || ws.readyState !== ws_1.default.OPEN) {
+        if (!ws || ws.readyState !== WebSocket.OPEN) {
             return reject(new Error("WebSocket is not connected"));
         }
         const id = generateId();
@@ -108,7 +70,7 @@ function handleMessage(raw) {
     }
 }
 // ------------------- Activation -------------------
-function activate(context) {
+export function activate(context) {
     fileProvider = new FileProvider();
     propertiesPanel = new PropertiesPanel();
     extensionPath = context.extensionPath;
@@ -124,6 +86,7 @@ function activate(context) {
             propertiesPanel.update(e.selection[0]);
         }
     }));
+    context.subscriptions.push(vscode.window.registerCustomEditorProvider("robloxViewport.editor", new RobloxViewportProvider()));
     context.subscriptions.push(vscode.commands.registerCommand("bst.startServer", async () => {
         serverReady = await checkWebSocketAvailable();
         if (connected || serverReady) {
@@ -242,7 +205,7 @@ function activate(context) {
             vscode.window.showInformationMessage("Already connected");
             return;
         }
-        ws = new ws_1.default("ws://localhost:5000");
+        ws = new WebSocket("ws://localhost:5000");
         ws.on("open", async () => {
             connected = true;
             vscode.window.showInformationMessage("Connected to Better Studio server");
@@ -370,6 +333,61 @@ function activate(context) {
             vscode.window.showErrorMessage("Failed to load project: " + err.message);
         }
     }));
+    context.subscriptions.push(vscode.commands.registerCommand("robloxViewport.open", async () => {
+        const uri = vscode.Uri.parse("untitled:viewport.rbxviewport");
+        await vscode.commands.executeCommand("vscode.openWith", uri, "robloxViewport.editor");
+    }));
+}
+class RobloxViewportProvider {
+    async resolveCustomTextEditor(document, webviewPanel) {
+        try {
+            await controller.init();
+        }
+        catch (err) {
+            vscode.window.showErrorMessage("Failed to initialize Studio.");
+            console.error(err);
+            return;
+        }
+        webviewPanel.webview.html = `
+      <html>
+      <body style="background:#1e1e1e;color:white;">
+        Roblox Studio Viewport
+      </body>
+      </html>
+    `;
+        let stopAligning = false;
+        const align = () => {
+            if (stopAligning)
+                return;
+            setTimeout(() => {
+                controller.alignStudioToEditor();
+                // If the panel is active, show above; otherwise, show below
+                if (webviewPanel.active) {
+                    controller.above();
+                }
+                else {
+                    controller.below();
+                }
+                align();
+            }, 300);
+        };
+        stopAligning = false;
+        align();
+        // Detect when the tab becomes active or inactive
+        webviewPanel.onDidChangeViewState((e) => {
+            if (e.webviewPanel.active) {
+                controller.above();
+            }
+            else {
+                controller.below();
+            }
+        });
+        // Stop aligning when the panel is disposed
+        webviewPanel.onDidDispose(() => {
+            stopAligning = true;
+            controller.below();
+        });
+    }
 }
 // ------------------- Project Loading -------------------
 async function checkAndLoadProject() {
@@ -416,10 +434,10 @@ async function refreshFileTree() {
     const tree = buildTreeFromDisk(resolvedPath);
     fileProvider.refresh(tree, resolvedPath);
 }
-function checkWebSocketAvailable(timeoutMs = 2000, init = false) {
+export function checkWebSocketAvailable(timeoutMs = 2000, init = false) {
     const url = "ws://localhost:3000";
     return new Promise((resolve) => {
-        const ws = new ws_1.default(url);
+        const ws = new WebSocket(url);
         let settled = false;
         const timeout = setTimeout(() => {
             if (!settled) {
@@ -513,7 +531,7 @@ function buildTreeFromDisk(rootPath) {
     return entries;
 }
 // ------------------- Deactivation -------------------
-function deactivate() {
+export function deactivate() {
     if (ws) {
         ws.close();
     }
