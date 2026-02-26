@@ -14,8 +14,6 @@ let fileProvider: FileProvider;
 let propertiesPanel: PropertiesPanel;
 let connected = false;
 let serverReady = false;
-let stopAligning = false;
-let alignAbove = true;
 
 const pendingRequests = new Map<string, (data: any) => void>();
 let nextId = 1;
@@ -477,9 +475,56 @@ class RobloxViewportProvider implements vscode.CustomTextEditorProvider {
       <html>
       <body style="background:#1e1e1e;color:white;">
         Roblox Studio Viewport
+        ${
+          /*<script>
+          const editorContent = document.body;
+
+          const vscode = acquireVsCodeApi();
+
+          function reportSize() {
+            const rect = editorContent.getBoundingClientRect();
+            vscode.postMessage({
+              type: 'viewportSize',
+              width: rect.width,
+              height: rect.height,
+              offsetTop: rect.top,
+              offsetLeft: rect.left
+            });
+          }
+
+          // Run on load and whenever size changes
+          reportSize();
+
+          // Optional: use ResizeObserver for dynamic resizing
+          const resizeObserver = new ResizeObserver(reportSize);
+          resizeObserver.observe(editorContent);
+        </script>*/ ""
+        }
       </body>
       </html>
     `;
+
+    // let left = 0;
+    // let top = 0;
+    // let width = 500;
+    // let height = 300;
+
+    // webviewPanel.webview.onDidReceiveMessage((message) => {
+    //   if (message.type === "viewportSize") {
+    //     const {
+    //       width: width_,
+    //       height: height_,
+    //       offsetTop,
+    //       offsetLeft,
+    //     } = message;
+    //     console.log("Received viewport size:", message);
+    //     // Update your controller here
+    //     left = offsetLeft;
+    //     top = offsetTop;
+    //     width = width_;
+    //     height = height_;
+    //   }
+    // });
 
     let stopAligning = false;
 
@@ -487,6 +532,7 @@ class RobloxViewportProvider implements vscode.CustomTextEditorProvider {
       if (stopAligning) return;
 
       setTimeout(() => {
+        // controller.alignStudioToEditor(left, top, width, height);
         controller.alignStudioToEditor();
 
         // If the panel is active, show above; otherwise, show below

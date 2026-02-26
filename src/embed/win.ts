@@ -138,6 +138,10 @@ function getWindowRect(hwnd: bigint): Rect {
 }
 
 export function alignStudioToEditor() {
+  // editorX: number,
+  // editorY: number,
+  // editorWidth: number,
+  // editorHeight: number,
   if (!studioHwnd || !vscodeHwnd) throw new Error("Not initialized");
 
   const rect = getWindowRect(vscodeHwnd);
@@ -147,10 +151,10 @@ export function alignStudioToEditor() {
 
   // --- VS Code UI Offsets (approximate defaults) ---
   const TITLEBAR_HEIGHT = 30; // draggable region
-  const TABBAR_HEIGHT = 35; // file tabs
-  const STATUSBAR_HEIGHT = 22; // bottom bar
+  const TABBAR_HEIGHT = 55; // file tabs
+  const STATUSBAR_HEIGHT = 24; // bottom bar
   const ACTIVITYBAR_WIDTH = 48; // left icons
-  const SIDEBAR_WIDTH = 300; // explorer panel (if visible)
+  const SIDEBAR_WIDTH = 295; // explorer panel (if visible)
 
   // You may want to detect sidebar visibility later.
   const editorX = rect.left + ACTIVITYBAR_WIDTH + SIDEBAR_WIDTH;
