@@ -462,106 +462,80 @@ class RobloxViewportProvider implements vscode.CustomTextEditorProvider {
   async resolveCustomTextEditor(
     document: vscode.TextDocument,
     webviewPanel: vscode.WebviewPanel,
-  ): Promise<void> {
-    try {
-      await controller.init();
-    } catch (err) {
-      vscode.window.showErrorMessage("Failed to initialize Studio.");
-      console.error(err);
+  ) {
+    const hwnd = await controller.getRobloxHwnd(); // your HWND finder
+    if (!hwnd) {
+      vscode.window.showErrorMessage("No Roblox Studio window found");
       return;
     }
 
+    const captureHandle = controller.init_capture(hwnd);
+
+    const bufferSize = 1920 * 1080 * 4; // max expected size
+    const buffer = Buffer.alloc(bufferSize);
+
+    // Webview HTML
     webviewPanel.webview.html = `
       <html>
-      <body style="background:#1e1e1e;color:white;">
-        Roblox Studio Viewport
-        ${
-          /*<script>
-          const editorContent = document.body;
+      <body style="margin:0;background:black;">
+        <canvas id="viewport"></canvas>
+        <script>
+          const canvas = document.getElementById('viewport');
+          const ctx = canvas.getContext('2d');
+          let frameBuffer = null;
+          let width = 0;
+          let height = 0;
 
-          const vscode = acquireVsCodeApi();
+          // Receive frames from Node
+          window.addEventListener('message', event => {
+            const msg = event.data;
+            if (msg.type === 'frame') {
+              frameBuffer = new Uint8ClampedArray(msg.data);
+              width = msg.width;
+              height = msg.height;
+            }
+          });
 
-          function reportSize() {
-            const rect = editorContent.getBoundingClientRect();
-            vscode.postMessage({
-              type: 'viewportSize',
-              width: rect.width,
-              height: rect.height,
-              offsetTop: rect.top,
-              offsetLeft: rect.left
-            });
+          // Draw loop
+          function drawLoop() {
+            if (frameBuffer) {
+              canvas.width = width;
+              canvas.height = height;
+              const imageData = new ImageData(frameBuffer, width, height);
+              ctx.putImageData(imageData, 0, 0);
+            }
+            requestAnimationFrame(drawLoop);
           }
 
-          // Run on load and whenever size changes
-          reportSize();
-
-          // Optional: use ResizeObserver for dynamic resizing
-          const resizeObserver = new ResizeObserver(reportSize);
-          resizeObserver.observe(editorContent);
-        </script>*/ ""
-        }
+          drawLoop();
+        </script>
       </body>
       </html>
     `;
 
-    // let left = 0;
-    // let top = 0;
-    // let width = 500;
-    // let height = 300;
-
-    // webviewPanel.webview.onDidReceiveMessage((message) => {
-    //   if (message.type === "viewportSize") {
-    //     const {
-    //       width: width_,
-    //       height: height_,
-    //       offsetTop,
-    //       offsetLeft,
-    //     } = message;
-    //     console.log("Received viewport size:", message);
-    //     // Update your controller here
-    //     left = offsetLeft;
-    //     top = offsetTop;
-    //     width = width_;
-    //     height = height_;
-    //   }
-    // });
-
-    let stopAligning = false;
-
-    const align = () => {
-      if (stopAligning) return;
-
-      setTimeout(() => {
-        // controller.alignStudioToEditor(left, top, width, height);
-        controller.alignStudioToEditor();
-
-        // If the panel is active, show above; otherwise, show below
-        if (webviewPanel.active) {
-          controller.above();
-        } else {
-          controller.below();
-        }
-
-        align();
-      }, 300);
+    // Node side frame loop
+    const updateFrame = () => {
+      let w = 0;
+      let h = 0;
+      const ok = controller.get_frame(captureHandle, buffer, w, h);
+      if (ok) {
+        // Send frame to webview
+        webviewPanel.webview.postMessage({
+          type: "frame",
+          data: buffer,
+          width: w,
+          height: h,
+        });
+      }
+      // Loop via setImmediate (Node context, not requestAnimationFrame)
+      setImmediate(updateFrame);
     };
 
-    stopAligning = false;
-    align();
+    updateFrame();
 
-    // Detect when the tab becomes active or inactive
-    webviewPanel.onDidChangeViewState((e) => {
-      if (e.webviewPanel.active) {
-        controller.above();
-      } else {
-        controller.below();
-      }
-    });
-
-    // Stop aligning when the panel is disposed
+    // Dispose handler
     webviewPanel.onDidDispose(() => {
-      stopAligning = true;
-      controller.below();
+      controller.release_capture(captureHandle);
     });
   }
 }
