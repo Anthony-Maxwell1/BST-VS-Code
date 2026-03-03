@@ -1,10 +1,10 @@
 import psList from "ps-list";
-import koffi from "koffi";
+import koffi, { proto } from "koffi";
 
 const user32 = koffi.load("user32.dll");
 
 export const WNDENUMPROC = koffi.proto(
-  "int __stdcall WNDENUMPROC(void *hwnd, intptr_t lParam)",
+  "int __stdcall WNDENUMPROC(intptr_t hwnd, intptr_t lParam)",
 );
 
 // Win32 bindings
@@ -45,7 +45,7 @@ async function findProcessWindow(processName: string): Promise<bigint | null> {
 
   const results: bigint[] = [];
 
-  const enumProc = koffi.register((hwnd: bigint) => {
+  const enumProc = koffi.register((hwnd: bigint, lParam: bigint) => {
     const pidBuf = Buffer.alloc(4);
     GetWindowThreadProcessId(hwnd, pidBuf);
     const pid = pidBuf.readUInt32LE(0);
@@ -58,6 +58,7 @@ async function findProcessWindow(processName: string): Promise<bigint | null> {
 
   EnumWindows(enumProc, 0);
   koffi.unregister(enumProc);
+  console.log(results);
 
   return results[0] ?? null;
 }
@@ -165,14 +166,14 @@ const lib = koffi.load(
 );
 
 const init_capture_raw = lib.func("void* init_capture(void*)");
-export function init_capture(hwnd: bigint | null | undefined): bigint {
+export function init_capture(hwnd: bigint | number | null | undefined): bigint {
   if (hwnd === null) {
     throw new Error("Invalid window handle");
   }
   console.log("Attempting to initialize capture for hwnd:", hwnd);
   console.log(typeof hwnd);
-  if (typeof hwnd !== "bigint") {
-    throw new TypeError("Expected window handle as bigint");
+  if (typeof hwnd !== "bigint" && typeof hwnd !== "number") {
+    throw new TypeError("Expected window handle as bigint or number");
   }
   return init_capture_raw(hwnd) as bigint;
 }

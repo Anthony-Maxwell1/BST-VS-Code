@@ -1,7 +1,7 @@
 import psList from "ps-list";
 import koffi from "koffi";
 const user32 = koffi.load("user32.dll");
-export const WNDENUMPROC = koffi.proto("int __stdcall WNDENUMPROC(void *hwnd, intptr_t lParam)");
+export const WNDENUMPROC = koffi.proto("int __stdcall WNDENUMPROC(intptr_t hwnd, intptr_t lParam)");
 // Win32 bindings
 const EnumWindows = user32.func("int __stdcall EnumWindows(void* lpEnumFunc, intptr_t lParam)");
 const GetWindowThreadProcessId = user32.func("uint __stdcall GetWindowThreadProcessId(void *hWnd, uint *lpdwProcessId)");
@@ -25,7 +25,7 @@ async function findProcessWindow(processName) {
         return null;
     }
     const results = [];
-    const enumProc = koffi.register((hwnd) => {
+    const enumProc = koffi.register((hwnd, lParam) => {
         const pidBuf = Buffer.alloc(4);
         GetWindowThreadProcessId(hwnd, pidBuf);
         const pid = pidBuf.readUInt32LE(0);
@@ -36,6 +36,7 @@ async function findProcessWindow(processName) {
     }, koffi.pointer(WNDENUMPROC));
     EnumWindows(enumProc, 0);
     koffi.unregister(enumProc);
+    console.log(results);
     return results[0] ?? null;
 }
 export async function getRobloxHwnd() {
@@ -128,8 +129,8 @@ export function init_capture(hwnd) {
     }
     console.log("Attempting to initialize capture for hwnd:", hwnd);
     console.log(typeof hwnd);
-    if (typeof hwnd !== "bigint") {
-        throw new TypeError("Expected window handle as bigint");
+    if (typeof hwnd !== "bigint" && typeof hwnd !== "number") {
+        throw new TypeError("Expected window handle as bigint or number");
     }
     return init_capture_raw(hwnd);
 }

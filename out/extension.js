@@ -84,7 +84,12 @@ export function activate(context) {
             propertiesPanel.update(e.selection[0]);
         }
     }));
-    context.subscriptions.push(vscode.window.registerCustomEditorProvider("robloxViewport.editor", new RobloxViewportProvider()));
+    context.subscriptions.push(vscode.window.registerCustomEditorProvider("robloxViewport.editor", new RobloxViewportProvider(), {
+        webviewOptions: {
+            retainContextWhenHidden: true,
+        },
+        supportsMultipleEditorsPerDocument: false,
+    }));
     context.subscriptions.push(vscode.commands.registerCommand("bst.startServer", async () => {
         serverReady = await checkWebSocketAvailable();
         if (connected || serverReady) {
@@ -338,72 +343,146 @@ export function activate(context) {
 }
 class RobloxViewportProvider {
     async resolveCustomTextEditor(document, webviewPanel) {
-        const hwnd = await controller.getRobloxHwnd(); // your HWND finder
+        webviewPanel.webview.options = {
+            enableScripts: true,
+        };
+        const hwnd = await controller.getRobloxHwnd();
         if (!hwnd) {
             vscode.window.showErrorMessage("No Roblox Studio window found");
             return;
         }
         const captureHandle = controller.init_capture(hwnd);
-        const bufferSize = 1920 * 1080 * 4; // max expected size
-        const buffer = Buffer.alloc(bufferSize);
-        // Webview HTML
+        // --------- Webview HTML (WebGL renderer) ----------
         webviewPanel.webview.html = `
-      <html>
-      <body style="margin:0;background:black;">
-        <canvas id="viewport"></canvas>
-        <script>
-          const canvas = document.getElementById('viewport');
-          const ctx = canvas.getContext('2d');
-          let frameBuffer = null;
-          let width = 0;
-          let height = 0;
+<!DOCTYPE html>
+<html>
+<body style="margin:0;background:black;overflow:hidden;">
+<canvas id="c"></canvas>
+<script>
+const canvas = document.getElementById('c');
+const gl = canvas.getContext('webgl2');
 
-          // Receive frames from Node
-          window.addEventListener('message', event => {
-            const msg = event.data;
-            if (msg.type === 'frame') {
-              frameBuffer = new Uint8ClampedArray(msg.data);
-              width = msg.width;
-              height = msg.height;
+let texture = gl.createTexture();
+gl.bindTexture(gl.TEXTURE_2D, texture);
+gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+
+const vs = \`
+attribute vec2 pos;
+varying vec2 uv;
+void main() {
+  uv = (pos + 1.0) * 0.5;
+  gl_Position = vec4(pos, 0.0, 1.0);
+}\`;
+
+const fs = \`
+precision mediump float;
+varying vec2 uv;
+uniform sampler2D tex;
+void main() {
+  gl_FragColor = texture2D(tex, vec2(uv.x, 1.0 - uv.y));
+}\`;
+
+function compile(type, src) {
+  const s = gl.createShader(type);
+  gl.shaderSource(s, src);
+  gl.compileShader(s);
+  return s;
+}
+
+const prog = gl.createProgram();
+gl.attachShader(prog, compile(gl.VERTEX_SHADER, vs));
+gl.attachShader(prog, compile(gl.FRAGMENT_SHADER, fs));
+gl.linkProgram(prog);
+gl.useProgram(prog);
+
+const buf = gl.createBuffer();
+gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([
+  -1,-1, 1,-1, -1,1,
+  -1,1, 1,-1, 1,1
+]), gl.STATIC_DRAW);
+
+const loc = gl.getAttribLocation(prog, "pos");
+gl.enableVertexAttribArray(loc);
+gl.vertexAttribPointer(loc, 2, gl.FLOAT, false, 0, 0);
+
+window.addEventListener('message', event => {
+  const msg = event.data;
+  if (msg.type !== 'frame') return;
+
+  const { width, height, data } = msg;
+
+  canvas.width = width;
+  canvas.height = height;
+  gl.viewport(0, 0, width, height);
+
+  gl.bindTexture(gl.TEXTURE_2D, texture);
+
+  gl.texImage2D(
+    gl.TEXTURE_2D,
+    0,
+    gl.RGBA,
+    width,
+    height,
+    0,
+    gl.RGBA,
+    gl.UNSIGNED_BYTE,
+    new Uint8Array(data)
+  );
+
+  gl.drawArrays(gl.TRIANGLES, 0, 6);
+
+  // Give buffer back to extension
+  vscode.postMessage({ type: "recycle", buffer: data }, [data]);
+});
+</script>
+</body>
+</html>
+`;
+        // --------- Zero-Copy Double Buffering ----------
+        const maxSize = 1920 * 1080 * 4;
+        const buffers = [new ArrayBuffer(maxSize), new ArrayBuffer(maxSize)];
+        let freeBuffers = [...buffers];
+        webviewPanel.webview.onDidReceiveMessage((msg) => {
+            if (msg.type === "recycle") {
+                freeBuffers.push(msg.buffer);
             }
-          });
-
-          // Draw loop
-          function drawLoop() {
-            if (frameBuffer) {
-              canvas.width = width;
-              canvas.height = height;
-              const imageData = new ImageData(frameBuffer, width, height);
-              ctx.putImageData(imageData, 0, 0);
+        });
+        const widthBuf = Buffer.allocUnsafe(4);
+        const heightBuf = Buffer.allocUnsafe(4);
+        let running = true;
+        const loop = () => {
+            if (!running)
+                return;
+            if (freeBuffers.length === 0) {
+                setImmediate(loop);
+                return;
             }
-            requestAnimationFrame(drawLoop);
-          }
-
-          drawLoop();
-        </script>
-      </body>
-      </html>
-    `;
-        // Node side frame loop
-        const updateFrame = () => {
-            let w = 0;
-            let h = 0;
-            const ok = controller.get_frame(captureHandle, buffer, w, h);
+            const ab = freeBuffers.pop();
+            const ok = controller.get_frame(captureHandle, ab, widthBuf, heightBuf);
             if (ok) {
-                // Send frame to webview
+                const w = widthBuf.readUInt32LE(0);
+                const h = heightBuf.readUInt32LE(0);
+                const size = w * h * 4;
+                const view = ab.slice(0, size); // only trim view, not copy
                 webviewPanel.webview.postMessage({
                     type: "frame",
-                    data: buffer,
                     width: w,
                     height: h,
+                    data: view,
                 });
             }
-            // Loop via setImmediate (Node context, not requestAnimationFrame)
-            setImmediate(updateFrame);
+            else {
+                freeBuffers.push(ab);
+            }
+            setTimeout(loop, 16);
         };
-        updateFrame();
-        // Dispose handler
+        loop();
         webviewPanel.onDidDispose(() => {
+            running = false;
             controller.release_capture(captureHandle);
         });
     }
