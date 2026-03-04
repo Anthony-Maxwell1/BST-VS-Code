@@ -368,29 +368,28 @@ let pixelView = null;
 window.addEventListener('message', event => {
     const msg = event.data;
 
-    if (msg.type === 'init') {
-        sharedBuffer = msg.sab;
-        metaView = new Uint32Array(sharedBuffer, 0, 2);
-        pixelView = new Uint8Array(sharedBuffer, 8);
-        return;
-    }
+    // Raw Uint8Array path — width/height packed into first 8 bytes
+    if (msg instanceof Uint8Array || msg?.buffer instanceof ArrayBuffer) {
+        const meta = new Uint32Array(msg.buffer, msg.byteOffset, 2);
+        const w = meta[0];
+        const h = meta[1];
+        const pixels = new Uint8Array(msg.buffer, msg.byteOffset + 8, w * h * 4);
 
-    if (msg.type === 'tick' && sharedBuffer) {
-        const w = metaView[0];
-        const h = metaView[1];
-        
         if (w !== texWidth || h !== texHeight) {
-            canvas.width = w; canvas.height = h;
+            canvas.width = w;
+            canvas.height = h;
             gl.viewport(0, 0, w, h);
             gl.bindTexture(gl.TEXTURE_2D, texture);
-            gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, w, h, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+            gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, w, h, 0,
+                          gl.RGBA, gl.UNSIGNED_BYTE, null);
             texWidth = w; texHeight = h;
         }
 
-        // pixelView is a live view into shared memory — zero copy
         gl.bindTexture(gl.TEXTURE_2D, texture);
-        gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, w, h, gl.RGBA, gl.UNSIGNED_BYTE, pixelView);
+        gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, w, h,
+                         gl.RGBA, gl.UNSIGNED_BYTE, pixels);
         gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+        return;
     }
 });
 </script>
