@@ -111,7 +111,7 @@ __declspec(dllexport) CaptureState* init_capture(HWND hwnd) {
         try {
             state->framePool = Direct3D11CaptureFramePool::Create(
                 winrtDevice,
-                DirectXPixelFormat::B8G8R8A8UIntNormalized,
+                DirectXPixelFormat::R8G8B8A8UIntNormalized,  // RGBA — no swizzle needed
                 2,
                 state->item.Size()
             );
@@ -205,17 +205,16 @@ __declspec(dllexport) bool get_frame(CaptureState* state, uint8_t* buffer, int* 
         *width = (int)desc.Width;
         *height = (int)desc.Height;
 
-        for (UINT y = 0; y < desc.Height; y++) {
-            uint8_t* src = (uint8_t*)mapped.pData + y * mapped.RowPitch;
-            uint8_t* dst = buffer + y * desc.Width * 4;
-
-            for (UINT x = 0; x < desc.Width; x++) {
-                dst[x * 4 + 0] = src[x * 4 + 2]; // R
-                dst[x * 4 + 1] = src[x * 4 + 1]; // G
-                dst[x * 4 + 2] = src[x * 4 + 0]; // B
-                dst[x * 4 + 3] = src[x * 4 + 3]; // A
+        // Just copy each row with memcpy
+        if (mapped.RowPitch == desc.Width * 4) {
+            memcpy(buffer, mapped.pData, desc.Width * desc.Height * 4);
+        } else {
+            for (UINT y = 0; y < desc.Height; y++) {
+                memcpy(buffer + y * desc.Width * 4,
+                    (uint8_t*)mapped.pData + y * mapped.RowPitch,
+                    desc.Width * 4);
             }
-        }   
+        }
 
         state->context->Unmap(state->stagingTexture.get(), 0);
         log("get_frame: frame copied ok");

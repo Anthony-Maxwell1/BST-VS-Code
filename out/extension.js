@@ -344,147 +344,83 @@ export function activate(context) {
 class RobloxViewportProvider {
     async resolveCustomTextEditor(document, webviewPanel) {
         webviewPanel.webview.options = {
-            enableScripts: true,
+            enableScripts: true, // <-- set it here
         };
-        const hwnd = await controller.getRobloxHwnd();
+        const hwnd = await controller.getRobloxHwnd(); // your HWND finder
         if (!hwnd) {
             vscode.window.showErrorMessage("No Roblox Studio window found");
             return;
         }
         const captureHandle = controller.init_capture(hwnd);
-        // --------- Webview HTML (WebGL renderer) ----------
-        webviewPanel.webview.html = `
-<!DOCTYPE html>
+        // Webview HTML
+        webviewPanel.webview.html = `<!DOCTYPE html>
 <html>
 <body style="margin:0;background:black;overflow:hidden;">
 <canvas id="c"></canvas>
 <script>
 const canvas = document.getElementById('c');
-const gl = canvas.getContext('webgl2');
+const gl = canvas.getContext('webgl2') || canvas.getContext('webgl');
 
-let texture = gl.createTexture();
-gl.bindTexture(gl.TEXTURE_2D, texture);
-gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
-gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
-gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-
-const vs = \`
-attribute vec2 pos;
-varying vec2 uv;
-void main() {
-  uv = (pos + 1.0) * 0.5;
-  gl_Position = vec4(pos, 0.0, 1.0);
-}\`;
-
-const fs = \`
-precision mediump float;
-varying vec2 uv;
-uniform sampler2D tex;
-void main() {
-  gl_FragColor = texture2D(tex, vec2(uv.x, 1.0 - uv.y));
-}\`;
-
-function compile(type, src) {
-  const s = gl.createShader(type);
-  gl.shaderSource(s, src);
-  gl.compileShader(s);
-  return s;
-}
-
-const prog = gl.createProgram();
-gl.attachShader(prog, compile(gl.VERTEX_SHADER, vs));
-gl.attachShader(prog, compile(gl.FRAGMENT_SHADER, fs));
-gl.linkProgram(prog);
-gl.useProgram(prog);
-
-const buf = gl.createBuffer();
-gl.bindBuffer(gl.ARRAY_BUFFER, buf);
-gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([
-  -1,-1, 1,-1, -1,1,
-  -1,1, 1,-1, 1,1
-]), gl.STATIC_DRAW);
-
-const loc = gl.getAttribLocation(prog, "pos");
-gl.enableVertexAttribArray(loc);
-gl.vertexAttribPointer(loc, 2, gl.FLOAT, false, 0, 0);
+let sharedBuffer = null;
+let metaView = null;
+let pixelView = null;
 
 window.addEventListener('message', event => {
-  const msg = event.data;
-  if (msg.type !== 'frame') return;
+    const msg = event.data;
 
-  const { width, height, data } = msg;
+    if (msg.type === 'init') {
+        sharedBuffer = msg.sab;
+        metaView = new Uint32Array(sharedBuffer, 0, 2);
+        pixelView = new Uint8Array(sharedBuffer, 8);
+        return;
+    }
 
-  canvas.width = width;
-  canvas.height = height;
-  gl.viewport(0, 0, width, height);
+    if (msg.type === 'tick' && sharedBuffer) {
+        const w = metaView[0];
+        const h = metaView[1];
+        
+        if (w !== texWidth || h !== texHeight) {
+            canvas.width = w; canvas.height = h;
+            gl.viewport(0, 0, w, h);
+            gl.bindTexture(gl.TEXTURE_2D, texture);
+            gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, w, h, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+            texWidth = w; texHeight = h;
+        }
 
-  gl.bindTexture(gl.TEXTURE_2D, texture);
-
-  gl.texImage2D(
-    gl.TEXTURE_2D,
-    0,
-    gl.RGBA,
-    width,
-    height,
-    0,
-    gl.RGBA,
-    gl.UNSIGNED_BYTE,
-    new Uint8Array(data)
-  );
-
-  gl.drawArrays(gl.TRIANGLES, 0, 6);
-
-  // Give buffer back to extension
-  vscode.postMessage({ type: "recycle", buffer: data }, [data]);
+        // pixelView is a live view into shared memory — zero copy
+        gl.bindTexture(gl.TEXTURE_2D, texture);
+        gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, w, h, gl.RGBA, gl.UNSIGNED_BYTE, pixelView);
+        gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+    }
 });
 </script>
 </body>
-</html>
-`;
-        // --------- Zero-Copy Double Buffering ----------
-        const maxSize = 1920 * 1080 * 4;
-        const buffers = [new ArrayBuffer(maxSize), new ArrayBuffer(maxSize)];
-        let freeBuffers = [...buffers];
-        webviewPanel.webview.onDidReceiveMessage((msg) => {
-            if (msg.type === "recycle") {
-                freeBuffers.push(msg.buffer);
-            }
-        });
-        const widthBuf = Buffer.allocUnsafe(4);
-        const heightBuf = Buffer.allocUnsafe(4);
+</html>`;
         let running = true;
-        const loop = () => {
-            if (!running)
-                return;
-            if (freeBuffers.length === 0) {
-                setImmediate(loop);
+        // Allocate once — SharedArrayBuffer is shared memory, no serialization
+        const SAB_SIZE = 1920 * 1080 * 4 + 8; // pixels + 2x uint32 for w/h
+        // Write frame into the shared buffer directly
+        const frameBuffer = Buffer.alloc(SAB_SIZE);
+        const updateFrame = () => {
+            if (!running) {
                 return;
             }
-            const ab = freeBuffers.pop();
-            const ok = controller.get_frame(captureHandle, ab, widthBuf, heightBuf);
+            // Write pixels starting at byte 8, reserve first 8 for w/h
+            const pixelSlice = frameBuffer.slice(8);
+            const widthBuf = frameBuffer.slice(0, 4);
+            const heightBuf = frameBuffer.slice(4, 8);
+            const ok = controller.get_frame(captureHandle, pixelSlice, widthBuf, heightBuf);
             if (ok) {
                 const w = widthBuf.readUInt32LE(0);
                 const h = heightBuf.readUInt32LE(0);
-                const size = w * h * 4;
-                const view = ab.slice(0, size); // only trim view, not copy
-                webviewPanel.webview.postMessage({
-                    type: "frame",
-                    width: w,
-                    height: h,
-                    data: view,
-                });
+                const byteCount = w * h * 4 + 8;
+                // Send a plain Uint8Array — structured clone handles this faster
+                // than a nested { data: ArrayBuffer } object
+                const view = new Uint8Array(frameBuffer.buffer, frameBuffer.byteOffset, byteCount);
+                webviewPanel.webview.postMessage(view);
             }
-            else {
-                freeBuffers.push(ab);
-            }
-            setTimeout(loop, 16);
+            setImmediate(updateFrame);
         };
-        loop();
-        webviewPanel.onDidDispose(() => {
-            running = false;
-            controller.release_capture(captureHandle);
-        });
     }
 }
 // ------------------- Project Loading -------------------
