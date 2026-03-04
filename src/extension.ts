@@ -481,45 +481,99 @@ class RobloxViewportProvider implements vscode.CustomTextEditorProvider {
 
     const captureHandle = controller.init_capture(hwnd);
 
+    const bufferSize = 1920 * 1080 * 4; // max expected size
+    const buffer = Buffer.alloc(bufferSize);
+
     // Webview HTML
     webviewPanel.webview.html = `<!DOCTYPE html>
 <html>
-<body style="margin:0;background:black;overflow:hidden;">
+<body style="margin:0;background:black;overflow:hidden;padding:0;">
 <canvas id="c"></canvas>
 <script>
 const canvas = document.getElementById('c');
 const gl = canvas.getContext('webgl2') || canvas.getContext('webgl');
 
-let sharedBuffer = null;
-let metaView = null;
-let pixelView = null;
+if (!gl) {
+  document.body.innerHTML = "WebGL not supported";
+  throw new Error("WebGL not supported");
+}
 
-window.addEventListener('message', event => {
-    const msg = event.data;
+// Create texture once
+const texture = gl.createTexture();
+gl.bindTexture(gl.TEXTURE_2D, texture);
+gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
 
-    // Raw Uint8Array path — width/height packed into first 8 bytes
-    if (msg instanceof Uint8Array || msg?.buffer instanceof ArrayBuffer) {
-        const meta = new Uint32Array(msg.buffer, msg.byteOffset, 2);
-        const w = meta[0];
-        const h = meta[1];
-        const pixels = new Uint8Array(msg.buffer, msg.byteOffset + 8, w * h * 4);
+// Shaders
+const vsSource = \`
+attribute vec2 pos;
+varying vec2 uv;
+void main() {
+  uv = (pos + 1.0) * 0.5;
+  gl_Position = vec4(pos,0,1);
+}
+\`;
+const fsSource = \`
+precision mediump float;
+varying vec2 uv;
+uniform sampler2D tex;
+void main() {
+  gl_FragColor = texture2D(tex, uv);
+}
+\`;
+function compile(type, src){
+  const s = gl.createShader(type);
+  gl.shaderSource(s, src);
+  gl.compileShader(s);
+  return s;
+}
+const program = gl.createProgram();
+gl.attachShader(program, compile(gl.VERTEX_SHADER, vsSource));
+gl.attachShader(program, compile(gl.FRAGMENT_SHADER, fsSource));
+gl.linkProgram(program);
+gl.useProgram(program);
 
-        if (w !== texWidth || h !== texHeight) {
-            canvas.width = w;
-            canvas.height = h;
-            gl.viewport(0, 0, w, h);
-            gl.bindTexture(gl.TEXTURE_2D, texture);
-            gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, w, h, 0,
-                          gl.RGBA, gl.UNSIGNED_BYTE, null);
-            texWidth = w; texHeight = h;
-        }
+// Fullscreen quad
+const buffer = gl.createBuffer();
+gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
+gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([
+  -1,-1,
+   1,-1,
+  -1, 1,
+   1, 1
+]), gl.STATIC_DRAW);
+const posLoc = gl.getAttribLocation(program,"pos");
+gl.enableVertexAttribArray(posLoc);
+gl.vertexAttribPointer(posLoc,2,gl.FLOAT,false,0,0);
 
-        gl.bindTexture(gl.TEXTURE_2D, texture);
-        gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, w, h,
-                         gl.RGBA, gl.UNSIGNED_BYTE, pixels);
-        gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
-        return;
-    }
+let texWidth=0, texHeight=0;
+
+window.addEventListener('message', event=>{
+  const msg = event.data;
+  if(msg.type!=='frame') return;
+
+  const w = msg.width;
+  const h = msg.height;
+  const pixels = new Uint8Array(msg.data);
+
+  // Resize canvas only if resolution changes
+  if(w!==texWidth || h!==texHeight){
+    canvas.width = w;
+    canvas.height = h;
+    gl.viewport(0,0,w,h);
+    // Allocate texture once
+    gl.bindTexture(gl.TEXTURE_2D, texture);
+    gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,w,h,0,gl.RGBA,gl.UNSIGNED_BYTE,null);
+    texWidth=w; texHeight=h;
+  }
+
+  gl.bindTexture(gl.TEXTURE_2D, texture);
+  gl.texSubImage2D(gl.TEXTURE_2D,0,0,0,w,h,gl.RGBA,gl.UNSIGNED_BYTE,pixels);
+
+  gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
 });
 </script>
 </body>
@@ -527,24 +581,14 @@ window.addEventListener('message', event => {
 
     let running = true;
 
-    // Allocate once — SharedArrayBuffer is shared memory, no serialization
-    const SAB_SIZE = 1920 * 1080 * 4 + 8; // pixels + 2x uint32 for w/h
-    // Write frame into the shared buffer directly
-    const frameBuffer = Buffer.alloc(SAB_SIZE);
-
     const updateFrame = () => {
-      if (!running) {
-        return;
-      }
+      if (!running) return;
 
-      // Write pixels starting at byte 8, reserve first 8 for w/h
-      const pixelSlice = frameBuffer.slice(8);
-      const widthBuf = frameBuffer.slice(0, 4);
-      const heightBuf = frameBuffer.slice(4, 8);
-
+      const widthBuf = Buffer.alloc(4);
+      const heightBuf = Buffer.alloc(4);
       const ok = controller.get_frame(
         captureHandle,
-        pixelSlice,
+        buffer,
         widthBuf,
         heightBuf,
       );
@@ -552,20 +596,31 @@ window.addEventListener('message', event => {
       if (ok) {
         const w = widthBuf.readUInt32LE(0);
         const h = heightBuf.readUInt32LE(0);
-        const byteCount = w * h * 4 + 8;
+        const frameSize = w * h * 4;
 
-        // Send a plain Uint8Array — structured clone handles this faster
-        // than a nested { data: ArrayBuffer } object
-        const view = new Uint8Array(
-          frameBuffer.buffer,
-          frameBuffer.byteOffset,
-          byteCount,
+        // Slice into a plain ArrayBuffer — this serializes correctly over IPC
+        const ab = buffer.buffer.slice(
+          buffer.byteOffset,
+          buffer.byteOffset + frameSize,
         );
-        webviewPanel.webview.postMessage(view);
+
+        webviewPanel.webview.postMessage({
+          type: "frame",
+          data: ab,
+          width: w,
+          height: h,
+        });
       }
 
-      setImmediate(updateFrame);
+      setTimeout(updateFrame, 16); // ~60fps, don't saturate event loop
     };
+
+    updateFrame();
+
+    webviewPanel.onDidDispose(() => {
+      running = false;
+      controller.release_capture(captureHandle);
+    });
   }
 }
 
