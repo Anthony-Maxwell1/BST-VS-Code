@@ -43,6 +43,20 @@
     },
     "commands": [
       {
+        "command": "robloxViewport.open",
+        "title": "Open Roblox Viewport"
+      },
+      {
+        "command": "bst.startServer",
+        "title": "Start Server",
+        "icon": "$(play)"
+      },
+      {
+        "command": "bst.stopServer",
+        "title": "Stop Server",
+        "icon": "$(stop)"
+      },
+      {
         "command": "bst.connect",
         "title": "Connect to Server",
         "icon": "$(plug)"
@@ -73,10 +87,6 @@
         "icon": "$(file-code)"
       },
       {
-        "command": "bst.saveScript",
-        "title": "BST: Save Script to Backend"
-      },
-      {
         "command": "bst.deleteInstance",
         "title": "Delete Instance",
         "icon": "$(trash)"
@@ -85,6 +95,28 @@
         "command": "bst.editProperty",
         "title": "Edit Property",
         "icon": "$(edit)"
+      },
+      {
+        "command": "bst.installCli",
+        "title": "Install CLI",
+        "icon": "$(plug)"
+      },
+      {
+        "command": "bst.installCore",
+        "title": "Install Core",
+        "icon": "$(plug)"
+      }
+    ],
+    "customEditors": [
+      {
+        "viewType": "robloxViewport.editor",
+        "displayName": "Roblox Studio Viewport",
+        "selector": [
+          {
+            "filenamePattern": "*.rbxviewport"
+          }
+        ],
+        "priority": "default"
       },
       {
         "command": "bst.updateGitState",
@@ -104,6 +136,16 @@
     ],
     "menus": {
       "view/title": [
+        {
+          "command": "bst.startServer",
+          "when": "view == filePanel && !bst.connected && !bst.available",
+          "group": "navigation@1"
+        },
+        {
+          "command": "bst.stopServer",
+          "when": "view == filePanel && !bst.connected && bst.available",
+          "group": "navigation@1"
+        },
         {
           "command": "bst.connect",
           "when": "view == filePanel && !bst.connected",
@@ -147,15 +189,7 @@
           "group": "inline@1"
         }
       ]
-    },
-    "keybindings": [
-      {
-        "command": "bst.saveScript",
-        "key": "ctrl+s",
-        "mac": "cmd+s",
-        "when": "editorTextFocus && resourceExtname == .lua"
-      }
-    ]
+    }
   },
   "scripts": {
     "vscode:prepublish": "pnpm run compile",
@@ -177,6 +211,11 @@
     "typescript-eslint": "^8.54.0"
   },
   "dependencies": {
+    "koffi": "^2.15.1",
+    "ps-list": "^9.0.0",
+    "win32-api": "^26.1.2",
     "ws": "^8.19.0"
-  }
+  },
+  "type": "module",
+  "packageManager": "pnpm@10.30.2+sha512.36cdc707e7b7940a988c9c1ecf88d084f8514b5c3f085f53a2e244c2921d3b2545bc20dd4ebe1fc245feec463bb298aecea7a63ed1f7680b877dc6379d8d0cb4"
 }

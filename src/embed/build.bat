@@ -1,0 +1,1 @@
+cl /LD /EHsc /std:c++17 /ZW capture-addon.cpp /link /OUT:capture-addon.dll windowsapp.lib runtimeobject.lib user32.lib
