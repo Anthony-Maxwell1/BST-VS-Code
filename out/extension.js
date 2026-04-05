@@ -36,6 +36,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
+exports.GitItem = exports.GitPanelProvider = void 0;
 exports.activate = activate;
 exports.deactivate = deactivate;
 const vscode = __importStar(require("vscode"));
@@ -46,7 +47,9 @@ const path = __importStar(require("path"));
 let ws;
 let fileProvider;
 let propertiesPanel;
+let gitPanel;
 let connected = false;
+let usingGit = false; // whether the backend project is a git repo
 const pendingRequests = new Map();
 let nextId = 1;
 function generateId() {
@@ -61,6 +64,26 @@ function sendCliCommand(command, args) {
         const payload = { type: 'cli', command, id };
         if (args) {
             payload.args = args;
+        }
+        pendingRequests.set(id, resolve);
+        ws.send(JSON.stringify(payload));
+        setTimeout(() => {
+            if (pendingRequests.has(id)) {
+                pendingRequests.delete(id);
+                reject(new Error(`Request "${command}" timed out`));
+            }
+        }, 30_000);
+    });
+}
+function sendGitCommand(command, args) {
+    return new Promise((resolve, reject) => {
+        if (!ws || ws.readyState !== ws_1.default.OPEN) {
+            return reject(new Error('WebSocket is not connected'));
+        }
+        const id = generateId();
+        const payload = { type: 'git', args: { action: command }, id };
+        if (args) {
+            payload.args = { ...payload.args, ...args };
         }
         pendingRequests.set(id, resolve);
         ws.send(JSON.stringify(payload));
@@ -106,12 +129,14 @@ function handleMessage(raw) {
 function activate(context) {
     fileProvider = new FileProvider();
     propertiesPanel = new PropertiesPanel();
+    gitPanel = new GitPanel();
     const fileTreeView = vscode.window.createTreeView('filePanel', {
         treeDataProvider: fileProvider,
         showCollapseAll: true
     });
     context.subscriptions.push(fileTreeView);
     context.subscriptions.push(vscode.window.registerTreeDataProvider('propertiesPanel', propertiesPanel));
+    context.subscriptions.push(vscode.window.registerTreeDataProvider('gitPanel', gitPanel));
     // Handle selection changes in the file tree → update properties
     context.subscriptions.push(fileTreeView.onDidChangeSelection(e => {
         if (e.selection.length > 0 && e.selection[0] instanceof FileNode) {
@@ -163,6 +188,17 @@ function activate(context) {
         fileProvider.clear();
         propertiesPanel.clear();
         vscode.commands.executeCommand('setContext', 'bst.connected', false);
+    }));
+    // --- Update git state ---
+    context.subscriptions.push(vscode.commands.registerCommand('bst.updateGitState', async () => {
+        try {
+            const resp = await sendGitCommand('status');
+            usingGit = !!resp.status;
+            vscode.commands.executeCommand('setContext', 'bst.usingGit', usingGit);
+        }
+        catch {
+            // ignore errors
+        }
     }));
     // --- Edit a property (called from properties panel inline button) ---
     context.subscriptions.push(vscode.commands.registerCommand('bst.editProperty', async (item) => {
@@ -620,4 +656,102 @@ class PropertiesPanel {
         this._onDidChangeTreeData.fire(undefined);
     }
 }
+class GitPanel {
+    _onDidChangeTreeData = new vscode.EventEmitter();
+    onDidChangeTreeData = this._onDidChangeTreeData.event;
+    items = [];
+    getTreeItem(element) { return element; }
+    getChildren() { return this.items; }
+    update(node) {
+        this.items = [];
+        // Header section
+        const nameItem = new PropertyItem(`${node.label}`);
+        nameItem.description = node.className;
+        nameItem.iconPath = getIconForClass(node.className, !!node.scriptPath, node.children.length > 0);
+        nameItem.tooltip = `${node.label} (${node.className})`;
+        this.items.push(nameItem);
+        // Read & display properties from YAML
+        const propsFile = path.join(node.fullPath, 'properties.yaml');
+        if (fs.existsSync(propsFile)) {
+            try {
+                const raw = fs.readFileSync(propsFile, 'utf-8');
+                const props = parseSimpleYaml(raw);
+                if (Object.keys(props).length === 0) {
+                    this.items.push(new PropertyItem('(no properties)'));
+                }
+                else {
+                    for (const [key, value] of Object.entries(props)) {
+                        this.items.push(new PropertyItem(key, {
+                            propKey: key,
+                            propValue: value,
+                            ownerNode: node
+                        }));
+                    }
+                }
+            }
+            catch {
+                this.items.push(new PropertyItem('(error reading properties.yaml)'));
+            }
+        }
+        else {
+            this.items.push(new PropertyItem('(no properties.yaml found)'));
+        }
+        // Script shortcut
+        if (node.scriptPath) {
+            const scriptItem = new PropertyItem('Open Script');
+            scriptItem.iconPath = new vscode.ThemeIcon('file-code');
+            scriptItem.tooltip = 'Open script in editor';
+            scriptItem.command = {
+                command: 'bst.openScript',
+                title: 'Open Script',
+                arguments: [node]
+            };
+            this.items.push(scriptItem);
+        }
+        this._onDidChangeTreeData.fire(undefined);
+    }
+    clear() {
+        this.items = [];
+        this._onDidChangeTreeData.fire(undefined);
+    }
+}
+class GitPanelProvider {
+    _onDidChangeTreeData = new vscode.EventEmitter();
+    onDidChangeTreeData = this._onDidChangeTreeData.event;
+    gitState = [];
+    constructor() {
+        // Initial load
+        this.refresh();
+    }
+    refresh() {
+        // Calls the bst.updateGitState command to get current git status
+        vscode.commands.executeCommand('bst.updateGitState').then((state) => {
+            // You can adapt this depending on what bst.updateGitState returns
+            // For now, assume it returns an array of file names or simple objects
+            this.gitState = state.map((file) => new GitItem(file.name || file, vscode.TreeItemCollapsibleState.None));
+            this._onDidChangeTreeData.fire();
+        });
+    }
+    getTreeItem(element) {
+        return element;
+    }
+    getChildren(element) {
+        if (!element) {
+            return Promise.resolve(this.gitState);
+        }
+        return Promise.resolve([]);
+    }
+}
+exports.GitPanelProvider = GitPanelProvider;
+class GitItem extends vscode.TreeItem {
+    label;
+    collapsibleState;
+    constructor(label, collapsibleState) {
+        super(label, collapsibleState);
+        this.label = label;
+        this.collapsibleState = collapsibleState;
+        this.contextValue = 'gitItem';
+    }
+}
+exports.GitItem = GitItem;
 //# sourceMappingURL=extension.js.map

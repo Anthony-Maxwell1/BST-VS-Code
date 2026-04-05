@@ -24,12 +24,20 @@
         {
           "id": "filePanel",
           "name": "Hierarchy",
-          "when": "true"
+          "when": "true",
+          "icon": "$(files)"
         },
         {
           "id": "propertiesPanel",
           "name": "Properties",
-          "when": "true"
+          "when": "true",
+          "icon": "$(settings-gear)"
+        },
+        {
+          "id": "gitPanel",
+          "name": "Git",
+          "when": "projectUsesGit",
+          "icon": "$(git-branch)"
         }
       ]
     },
@@ -77,6 +85,21 @@
         "command": "bst.editProperty",
         "title": "Edit Property",
         "icon": "$(edit)"
+      },
+      {
+        "command": "bst.updateGitState",
+        "title": "Update Git State",
+        "icon": "$(git-branch)"
+      },
+      {
+        "command": "bst.gitPull",
+        "title": "Git - Pull",
+        "icon": "$(check)"
+      },
+      {
+        "command": "bst.gitCommit",
+        "title": "Commit All Changes and Push",
+        "icon": "$(git-commit)"
       }
     ],
     "menus": {
