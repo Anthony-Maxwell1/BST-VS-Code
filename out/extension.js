@@ -49,10 +49,10 @@ function sendCliCommand(command, args) {
 function sendGitCommand(command, args) {
     return new Promise((resolve, reject) => {
         if (!ws || ws.readyState !== WebSocket.OPEN) {
-            return reject(new Error('WebSocket is not connected'));
+            return reject(new Error("WebSocket is not connected"));
         }
         const id = generateId();
-        const payload = { type: 'git', args: { action: command }, id };
+        const payload = { type: "git", args: { action: command }, id };
         if (args) {
             payload.args = { ...payload.args, ...args };
         }
@@ -108,7 +108,7 @@ export function activate(context) {
     });
     context.subscriptions.push(fileTreeView);
     context.subscriptions.push(vscode.window.registerTreeDataProvider("propertiesPanel", propertiesPanel));
-    context.subscriptions.push(vscode.window.registerTreeDataProvider('gitPanel', gitPanel));
+    context.subscriptions.push(vscode.window.registerTreeDataProvider("gitPanel", gitPanel));
     // Handle selection changes in the file tree → update properties
     context.subscriptions.push(fileTreeView.onDidChangeSelection((e) => {
         if (e.selection.length > 0 && e.selection[0] instanceof FileNode) {
@@ -280,13 +280,15 @@ export function activate(context) {
         vscode.commands.executeCommand("setContext", "bst.connected", false);
     }));
     // --- Update git state ---
-    context.subscriptions.push(vscode.commands.registerCommand('bst.updateGitState', async () => {
+    context.subscriptions.push(vscode.commands.registerCommand("bst.updateGitState", async () => {
         try {
-            const resp = await sendGitCommand('status');
+            const resp = await sendGitCommand("status");
             usingGit = !!resp.status;
-            vscode.commands.executeCommand('setContext', 'bst.usingGit', usingGit);
+            vscode.window.showInformationMessage(usingGit ? "Git repository detected" : "No git repository");
+            vscode.commands.executeCommand("setContext", "bst.usingGit", usingGit);
         }
-        catch {
+        catch (err) {
+            vscode.window.showErrorMessage("Failed to get git status: " + err.message);
             // ignore errors
         }
     }));
@@ -390,10 +392,10 @@ class RobloxViewportProvider {
 
 This feature is highly experimental and currently has major limitations:
 
-• Roblox Studio must be open
-• Performance is very poor (significant lag)
-• No user input support
-• Windows only (no other platforms supported)
+ • Roblox Studio must be open
+ • Performance is very poor (significant lag)
+ • No user input support
+ • Windows only (no other platforms supported)
 
 We strongly recommend using VS Code purely as an editor for now, similar to a Unity workflow.`, options);
         if (controller === null) {
@@ -810,16 +812,12 @@ class FileProvider {
     setConnected(val) {
         this._connected = val;
         if (!val) {
-            this.roots = [
-                new PlaceholderNode("Not connected", "Click Connect in the toolbar"),
-            ];
+            this.roots = [new PlaceholderNode("Not connected", "Click Connect in the toolbar")];
             this._onDidChangeTreeData.fire(undefined);
         }
     }
     showNoProjects() {
-        this.roots = [
-            new PlaceholderNode("No projects found", "Add .rbxl files to ./projects"),
-        ];
+        this.roots = [new PlaceholderNode("No projects found", "Add .rbxl files to ./projects")];
         this._onDidChangeTreeData.fire(undefined);
     }
     refresh(entries, _unpackedPath) {
@@ -833,14 +831,10 @@ class FileProvider {
     }
     clear() {
         if (this._connected) {
-            this.roots = [
-                new PlaceholderNode("No project open", 'Use "Select Project" to open one'),
-            ];
+            this.roots = [new PlaceholderNode("No project open", 'Use "Select Project" to open one')];
         }
         else {
-            this.roots = [
-                new PlaceholderNode("Not connected", "Click Connect in the toolbar"),
-            ];
+            this.roots = [new PlaceholderNode("Not connected", "Click Connect in the toolbar")];
         }
         this._onDidChangeTreeData.fire(undefined);
     }
@@ -960,8 +954,12 @@ class GitPanel {
     _onDidChangeTreeData = new vscode.EventEmitter();
     onDidChangeTreeData = this._onDidChangeTreeData.event;
     items = [];
-    getTreeItem(element) { return element; }
-    getChildren() { return this.items; }
+    getTreeItem(element) {
+        return element;
+    }
+    getChildren() {
+        return this.items;
+    }
     update(node) {
         this.items = [];
         // Header section
@@ -971,40 +969,40 @@ class GitPanel {
         nameItem.tooltip = `${node.label} (${node.className})`;
         this.items.push(nameItem);
         // Read & display properties from YAML
-        const propsFile = path.join(node.fullPath, 'properties.yaml');
+        const propsFile = path.join(node.fullPath, "properties.yaml");
         if (fs.existsSync(propsFile)) {
             try {
-                const raw = fs.readFileSync(propsFile, 'utf-8');
+                const raw = fs.readFileSync(propsFile, "utf-8");
                 const props = parseSimpleYaml(raw);
                 if (Object.keys(props).length === 0) {
-                    this.items.push(new PropertyItem('(no properties)'));
+                    this.items.push(new PropertyItem("(no properties)"));
                 }
                 else {
                     for (const [key, value] of Object.entries(props)) {
                         this.items.push(new PropertyItem(key, {
                             propKey: key,
                             propValue: value,
-                            ownerNode: node
+                            ownerNode: node,
                         }));
                     }
                 }
             }
             catch {
-                this.items.push(new PropertyItem('(error reading properties.yaml)'));
+                this.items.push(new PropertyItem("(error reading properties.yaml)"));
             }
         }
         else {
-            this.items.push(new PropertyItem('(no properties.yaml found)'));
+            this.items.push(new PropertyItem("(no properties.yaml found)"));
         }
         // Script shortcut
         if (node.scriptPath) {
-            const scriptItem = new PropertyItem('Open Script');
-            scriptItem.iconPath = new vscode.ThemeIcon('file-code');
-            scriptItem.tooltip = 'Open script in editor';
+            const scriptItem = new PropertyItem("Open Script");
+            scriptItem.iconPath = new vscode.ThemeIcon("file-code");
+            scriptItem.tooltip = "Open script in editor";
             scriptItem.command = {
-                command: 'bst.openScript',
-                title: 'Open Script',
-                arguments: [node]
+                command: "bst.openScript",
+                title: "Open Script",
+                arguments: [node],
             };
             this.items.push(scriptItem);
         }
@@ -1025,7 +1023,7 @@ export class GitPanelProvider {
     }
     refresh() {
         // Calls the bst.updateGitState command to get current git status
-        vscode.commands.executeCommand('bst.updateGitState').then((state) => {
+        vscode.commands.executeCommand("bst.updateGitState").then((state) => {
             // You can adapt this depending on what bst.updateGitState returns
             // For now, assume it returns an array of file names or simple objects
             this.gitState = state.map((file) => new GitItem(file.name || file, vscode.TreeItemCollapsibleState.None));
@@ -1049,7 +1047,7 @@ export class GitItem extends vscode.TreeItem {
         super(label, collapsibleState);
         this.label = label;
         this.collapsibleState = collapsibleState;
-        this.contextValue = 'gitItem';
+        this.contextValue = "gitItem";
     }
 }
 //# sourceMappingURL=extension.js.map

@@ -7,11 +7,11 @@ import * as os from "os";
 let controller: any;
 
 switch (process.platform) {
-    case "win32":
-        controller = await import("./embed/win.js");
-        break;
-    default:
-        controller = null;
+  case "win32":
+    controller = await import("./embed/win.js");
+    break;
+  default:
+    controller = null;
 }
 // ------------------- WebSocket & State -------------------
 
@@ -22,7 +22,7 @@ let propertiesPanel: PropertiesPanel;
 let gitPanel: GitPanel;
 let connected = false;
 let serverReady = false;
-let usingGit = false;   // whether the backend project is a git repo
+let usingGit = false; // whether the backend project is a git repo
 
 const pendingRequests = new Map<string, (data: any) => void>();
 let nextId = 1;
@@ -31,10 +31,7 @@ function generateId(): string {
   return `vsc-${nextId++}-${Date.now()}`;
 }
 
-function sendCliCommand(
-  command: string,
-  args?: Record<string, any>,
-): Promise<any> {
+function sendCliCommand(command: string, args?: Record<string, any>): Promise<any> {
   return new Promise((resolve, reject) => {
     if (!ws || ws.readyState !== WebSocket.OPEN) {
       return reject(new Error("WebSocket is not connected"));
@@ -56,25 +53,26 @@ function sendCliCommand(
   });
 }
 
-
 function sendGitCommand(command: string, args?: Record<string, any>): Promise<any> {
-    return new Promise((resolve, reject) => {
-        if (!ws || ws.readyState !== WebSocket.OPEN) {
-            return reject(new Error('WebSocket is not connected'));
-        }
-        const id = generateId();
-        const payload: Record<string, any> = { type: 'git', args: { action: command }, id };
-        if (args) { payload.args = {...payload.args, ...args } }
-        pendingRequests.set(id, resolve);
-        ws.send(JSON.stringify(payload));
+  return new Promise((resolve, reject) => {
+    if (!ws || ws.readyState !== WebSocket.OPEN) {
+      return reject(new Error("WebSocket is not connected"));
+    }
+    const id = generateId();
+    const payload: Record<string, any> = { type: "git", args: { action: command }, id };
+    if (args) {
+      payload.args = { ...payload.args, ...args };
+    }
+    pendingRequests.set(id, resolve);
+    ws.send(JSON.stringify(payload));
 
-        setTimeout(() => {
-            if (pendingRequests.has(id)) {
-                pendingRequests.delete(id);
-                reject(new Error(`Request "${command}" timed out`));
-            }
-        }, 30_000);
-    });
+    setTimeout(() => {
+      if (pendingRequests.has(id)) {
+        pendingRequests.delete(id);
+        reject(new Error(`Request "${command}" timed out`));
+      }
+    }, 30_000);
+  });
 }
 
 function sendEdit(args: Record<string, any>): Promise<any> {
@@ -115,7 +113,7 @@ export function activate(context: vscode.ExtensionContext) {
   fileProvider = new FileProvider();
   propertiesPanel = new PropertiesPanel();
   extensionPath = context.extensionPath;
-    gitPanel = new GitPanel();
+  gitPanel = new GitPanel();
 
   const fileTreeView = vscode.window.createTreeView("filePanel", {
     treeDataProvider: fileProvider,
@@ -126,8 +124,7 @@ export function activate(context: vscode.ExtensionContext) {
     vscode.window.registerTreeDataProvider("propertiesPanel", propertiesPanel),
   );
 
-    context.subscriptions.push(
-        vscode.window.registerTreeDataProvider('gitPanel', gitPanel))
+  context.subscriptions.push(vscode.window.registerTreeDataProvider("gitPanel", gitPanel));
 
   // Handle selection changes in the file tree → update properties
   context.subscriptions.push(
@@ -223,28 +220,20 @@ export function activate(context: vscode.ExtensionContext) {
           fs.chmodSync(finalExePath, 0o755);
         }
 
-        vscode.window.showInformationMessage(
-          `bst binary installed to ${finalExePath}`,
-        );
+        vscode.window.showInformationMessage(`bst binary installed to ${finalExePath}`);
 
         // Add to PATH
         if (platform === "win32") {
           const addToPathCmd = `[Environment]::SetEnvironmentVariable('Path', "$([Environment]::GetEnvironmentVariable('Path', 'User'));${targetDir}", 'User')`; // TODO: FIX, SO PATH ISN'T TRUNCATED
-          cp.exec(
-            addToPathCmd,
-            { shell: "powershell.exe" },
-            (error, stdout, stderr) => {
-              if (error) {
-                vscode.window.showErrorMessage(
-                  `Failed to update PATH: ${stderr}`,
-                );
-              } else {
-                vscode.window.showInformationMessage(
-                  `Added ${targetDir} to PATH. Restart VS Code to apply.`,
-                );
-              }
-            },
-          );
+          cp.exec(addToPathCmd, { shell: "powershell.exe" }, (error, stdout, stderr) => {
+            if (error) {
+              vscode.window.showErrorMessage(`Failed to update PATH: ${stderr}`);
+            } else {
+              vscode.window.showInformationMessage(
+                `Added ${targetDir} to PATH. Restart VS Code to apply.`,
+              );
+            }
+          });
         } else {
           // Unix: add to shell profile
           const shell = process.env.SHELL || "";
@@ -261,9 +250,7 @@ export function activate(context: vscode.ExtensionContext) {
           );
         }
       } catch (err: any) {
-        vscode.window.showErrorMessage(
-          `Error installing BST binary: ${err.message}`,
-        );
+        vscode.window.showErrorMessage(`Error installing BST binary: ${err.message}`);
       }
     }),
   );
@@ -272,9 +259,7 @@ export function activate(context: vscode.ExtensionContext) {
     vscode.commands.registerCommand("bst.installCore", async () => {
       cp.exec("bst fetch", (err, stdout, stderr) => {
         if (err) {
-          vscode.window.showErrorMessage(
-            "Failed to install Core: " + err.message,
-          );
+          vscode.window.showErrorMessage("Failed to install Core: " + err.message);
         } else {
           vscode.window.showInformationMessage("Core installed");
         }
@@ -286,9 +271,7 @@ export function activate(context: vscode.ExtensionContext) {
     vscode.commands.registerCommand("bst.stopServer", async () => {
       cp.exec("bst stop", (err, stdout, stderr) => {
         if (err) {
-          vscode.window.showErrorMessage(
-            "Failed to stop server: " + err.message,
-          );
+          vscode.window.showErrorMessage("Failed to stop server: " + err.message);
         } else {
           vscode.window.showInformationMessage("Server stopped");
         }
@@ -311,17 +294,13 @@ export function activate(context: vscode.ExtensionContext) {
 
       ws.on("open", async () => {
         connected = true;
-        vscode.window.showInformationMessage(
-          "Connected to Better Studio server",
-        );
+        vscode.window.showInformationMessage("Connected to Better Studio server");
         vscode.commands.executeCommand("setContext", "bst.connected", true);
         fileProvider.setConnected(true);
         try {
           await checkAndLoadProject();
         } catch (err: any) {
-          vscode.window.showErrorMessage(
-            "Failed to load project: " + err.message,
-          );
+          vscode.window.showErrorMessage("Failed to load project: " + err.message);
         }
       });
 
@@ -339,9 +318,7 @@ export function activate(context: vscode.ExtensionContext) {
         fileProvider.setConnected(false);
         fileProvider.clear();
         propertiesPanel.clear();
-        vscode.window.showWarningMessage(
-          "Disconnected from Better Studio server",
-        );
+        vscode.window.showWarningMessage("Disconnected from Better Studio server");
       });
     }),
   );
@@ -361,104 +338,95 @@ export function activate(context: vscode.ExtensionContext) {
     }),
   );
 
-    // --- Update git state ---
-    context.subscriptions.push(
-        vscode.commands.registerCommand('bst.updateGitState', async () => {
-            try {
-                const resp = await sendGitCommand('status');
-                usingGit = !!resp.status;
-                vscode.commands.executeCommand('setContext', 'bst.usingGit', usingGit);
-            } catch {
-                // ignore errors
-            }
-        })
-    );
+  // --- Update git state ---
+  context.subscriptions.push(
+    vscode.commands.registerCommand("bst.updateGitState", async () => {
+      try {
+        const resp = await sendGitCommand("status");
+        usingGit = !!resp.status;
+        vscode.window.showInformationMessage(
+          usingGit ? "Git repository detected" : "No git repository",
+        );
+        vscode.commands.executeCommand("setContext", "bst.usingGit", usingGit);
+      } catch (err: any) {
+        vscode.window.showErrorMessage("Failed to get git status: " + err.message);
+        // ignore errors
+      }
+    }),
+  );
 
   // --- Edit a property (called from properties panel inline button) ---
   context.subscriptions.push(
-    vscode.commands.registerCommand(
-      "bst.editProperty",
-      async (item: PropertyItem) => {
-        if (!item?.propKey || !item.ownerNode) {
-          return;
-        }
+    vscode.commands.registerCommand("bst.editProperty", async (item: PropertyItem) => {
+      if (!item?.propKey || !item.ownerNode) {
+        return;
+      }
 
-        const newValue = await vscode.window.showInputBox({
-          prompt: `New value for "${item.propKey}"`,
-          value: item.propValue ?? "",
+      const newValue = await vscode.window.showInputBox({
+        prompt: `New value for "${item.propKey}"`,
+        value: item.propValue ?? "",
+      });
+      if (newValue === undefined) {
+        return;
+      }
+
+      try {
+        await sendEdit({
+          uuid: item.ownerNode.folderName.split(".")[
+            item.ownerNode.folderName.split(".").length - 1
+          ],
+          action: "modify",
+          target: "property",
+          property: item.propKey,
+          value: newValue,
         });
-        if (newValue === undefined) {
-          return;
-        }
-
-        try {
-          await sendEdit({
-            uuid: item.ownerNode.folderName.split(".")[
-              item.ownerNode.folderName.split(".").length - 1
-            ],
-            action: "modify",
-            target: "property",
-            property: item.propKey,
-            value: newValue,
-          });
-          propertiesPanel.update(item.ownerNode);
-          vscode.window.showInformationMessage(`Updated ${item.propKey}`);
-        } catch (err: any) {
-          vscode.window.showErrorMessage("Edit failed: " + err.message);
-        }
-      },
-    ),
+        propertiesPanel.update(item.ownerNode);
+        vscode.window.showInformationMessage(`Updated ${item.propKey}`);
+      } catch (err: any) {
+        vscode.window.showErrorMessage("Edit failed: " + err.message);
+      }
+    }),
   );
 
   // --- Open script in editor (double-click or context menu) ---
   context.subscriptions.push(
-    vscode.commands.registerCommand(
-      "bst.openScript",
-      async (node: FileNode) => {
-        if (!node?.scriptPath) {
-          return;
-        }
-        const doc = await vscode.workspace.openTextDocument(
-          vscode.Uri.file(node.scriptPath),
-        );
-        await vscode.window.showTextDocument(doc);
-      },
-    ),
+    vscode.commands.registerCommand("bst.openScript", async (node: FileNode) => {
+      if (!node?.scriptPath) {
+        return;
+      }
+      const doc = await vscode.workspace.openTextDocument(vscode.Uri.file(node.scriptPath));
+      await vscode.window.showTextDocument(doc);
+    }),
   );
 
   // --- Delete instance ---
   context.subscriptions.push(
-    vscode.commands.registerCommand(
-      "bst.deleteInstance",
-      async (node: FileNode) => {
-        if (!node) {
-          return;
-        }
-        const confirm = await vscode.window.showWarningMessage(
-          `Delete "${node.label}"?`,
-          { modal: true },
-          "Delete",
-        );
-        if (confirm !== "Delete") {
-          return;
-        }
+    vscode.commands.registerCommand("bst.deleteInstance", async (node: FileNode) => {
+      if (!node) {
+        return;
+      }
+      const confirm = await vscode.window.showWarningMessage(
+        `Delete "${node.label}"?`,
+        { modal: true },
+        "Delete",
+      );
+      if (confirm !== "Delete") {
+        return;
+      }
 
-        try {
-          await sendEdit({
-            uuid: node.folderName.split(".")[
-              node.folderName.split(".").length - 1
-            ],
-            action: "delete",
-            target: "instance",
-          });
-          await refreshFileTree();
-          propertiesPanel.clear();
-          vscode.window.showInformationMessage(`Deleted ${node.label}`);
-        } catch (err: any) {
-          vscode.window.showErrorMessage("Delete failed: " + err.message);
-        }
-      },
-    ),
+      try {
+        await sendEdit({
+          uuid: node.folderName.split(".")[node.folderName.split(".").length - 1],
+          action: "delete",
+          target: "instance",
+        });
+        await refreshFileTree();
+        propertiesPanel.clear();
+        vscode.window.showInformationMessage(`Deleted ${node.label}`);
+      } catch (err: any) {
+        vscode.window.showErrorMessage("Delete failed: " + err.message);
+      }
+    }),
   );
 
   // --- Close project ---
@@ -492,9 +460,7 @@ export function activate(context: vscode.ExtensionContext) {
       try {
         await checkAndLoadProject();
       } catch (err: any) {
-        vscode.window.showErrorMessage(
-          "Failed to load project: " + err.message,
-        );
+        vscode.window.showErrorMessage("Failed to load project: " + err.message);
       }
     }),
   );
@@ -502,53 +468,47 @@ export function activate(context: vscode.ExtensionContext) {
   context.subscriptions.push(
     vscode.commands.registerCommand("robloxViewport.open", async () => {
       const uri = vscode.Uri.parse("untitled:viewport.rbxviewport");
-      await vscode.commands.executeCommand(
-        "vscode.openWith",
-        uri,
-        "robloxViewport.editor",
-      );
+      await vscode.commands.executeCommand("vscode.openWith", uri, "robloxViewport.editor");
     }),
   );
 }
 
 class RobloxViewportProvider implements vscode.CustomTextEditorProvider {
-  async resolveCustomTextEditor(
-    document: vscode.TextDocument,
-    webviewPanel: vscode.WebviewPanel,
-  ) {
+  async resolveCustomTextEditor(document: vscode.TextDocument, webviewPanel: vscode.WebviewPanel) {
     const options: vscode.MessageOptions = { modal: true };
-vscode.window.showWarningMessage(
-    `⚠️ Roblox Viewport (Experimental)
+    vscode.window.showWarningMessage(
+      `⚠️ Roblox Viewport (Experimental)
 
 This feature is highly experimental and currently has major limitations:
 
-• Roblox Studio must be open
-• Performance is very poor (significant lag)
-• No user input support
-• Windows only (no other platforms supported)
+ • Roblox Studio must be open
+ • Performance is very poor (significant lag)
+ • No user input support
+ • Windows only (no other platforms supported)
 
 We strongly recommend using VS Code purely as an editor for now, similar to a Unity workflow.`,
-    options
-);    if (controller === null) {
+      options,
+    );
+    if (controller === null) {
       webviewPanel.webview.html = `<html><body><h2>Unsupported platform</h2><p>Roblox viewport is only supported on Windows for now.</p></body></html>`;
     } else {
-    webviewPanel.webview.options = {
-      enableScripts: true, // <-- set it here
-    };
+      webviewPanel.webview.options = {
+        enableScripts: true, // <-- set it here
+      };
 
-    const hwnd = await controller.getRobloxHwnd(); // your HWND finder
-    if (!hwnd) {
-      vscode.window.showErrorMessage("No Roblox Studio window found");
-      return;
-    }
+      const hwnd = await controller.getRobloxHwnd(); // your HWND finder
+      if (!hwnd) {
+        vscode.window.showErrorMessage("No Roblox Studio window found");
+        return;
+      }
 
-    const captureHandle = controller.init_capture(hwnd);
+      const captureHandle = controller.init_capture(hwnd);
 
-    const bufferSize = 1920 * 1080 * 4; // max expected size
-    const buffer = Buffer.alloc(bufferSize);
+      const bufferSize = 1920 * 1080 * 4; // max expected size
+      const buffer = Buffer.alloc(bufferSize);
 
-    // Webview HTML
-    webviewPanel.webview.html = `<!DOCTYPE html>
+      // Webview HTML
+      webviewPanel.webview.html = `<!DOCTYPE html>
 <html>
 <body style="margin:0;background:black;overflow:hidden;padding:0;">
 <canvas id="c"></canvas>
@@ -642,50 +602,42 @@ window.addEventListener('message', event=>{
 </body>
 </html>`;
 
-    let running = true;
+      let running = true;
 
-    const updateFrame = () => {
-      if (!running) return;
+      const updateFrame = () => {
+        if (!running) return;
 
-      const widthBuf = Buffer.alloc(4);
-      const heightBuf = Buffer.alloc(4);
-      const ok = controller.get_frame(
-        captureHandle,
-        buffer,
-        widthBuf,
-        heightBuf,
-      );
+        const widthBuf = Buffer.alloc(4);
+        const heightBuf = Buffer.alloc(4);
+        const ok = controller.get_frame(captureHandle, buffer, widthBuf, heightBuf);
 
-      if (ok) {
-        const w = widthBuf.readUInt32LE(0);
-        const h = heightBuf.readUInt32LE(0);
-        const frameSize = w * h * 4;
+        if (ok) {
+          const w = widthBuf.readUInt32LE(0);
+          const h = heightBuf.readUInt32LE(0);
+          const frameSize = w * h * 4;
 
-        // Slice into a plain ArrayBuffer — this serializes correctly over IPC
-        const ab = buffer.buffer.slice(
-          buffer.byteOffset,
-          buffer.byteOffset + frameSize,
-        );
+          // Slice into a plain ArrayBuffer — this serializes correctly over IPC
+          const ab = buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + frameSize);
 
-        webviewPanel.webview.postMessage({
-          type: "frame",
-          data: ab,
-          width: w,
-          height: h,
-        });
-      }
+          webviewPanel.webview.postMessage({
+            type: "frame",
+            data: ab,
+            width: w,
+            height: h,
+          });
+        }
 
-      setTimeout(updateFrame, 16); // ~60fps, don't saturate event loop
-    };
+        setTimeout(updateFrame, 16); // ~60fps, don't saturate event loop
+      };
 
-    updateFrame();
+      updateFrame();
 
-    webviewPanel.onDidDispose(() => {
-      running = false;
-      controller.release_capture(captureHandle);
-    });
+      webviewPanel.onDidDispose(() => {
+        running = false;
+        controller.release_capture(captureHandle);
+      });
+    }
   }
-}
 }
 
 // ------------------- Project Loading -------------------
@@ -718,9 +670,7 @@ async function checkAndLoadProject() {
     }
     vscode.window.showInformationMessage(`Opened project: ${pick}`);
   } else {
-    vscode.window.showInformationMessage(
-      `Resuming project: ${status.currentProject}`,
-    );
+    vscode.window.showInformationMessage(`Resuming project: ${status.currentProject}`);
   }
 
   await refreshFileTree();
@@ -736,9 +686,7 @@ async function refreshFileTree() {
   const resolvedPath = status.unpackedPath as string;
 
   if (!fs.existsSync(resolvedPath)) {
-    vscode.window.showWarningMessage(
-      `Unpacked path does not exist: ${resolvedPath}`,
-    );
+    vscode.window.showWarningMessage(`Unpacked path does not exist: ${resolvedPath}`);
     fileProvider.clear();
     return;
   }
@@ -747,10 +695,7 @@ async function refreshFileTree() {
   fileProvider.refresh(tree, resolvedPath);
 }
 
-export function checkWebSocketAvailable(
-  timeoutMs = 2000,
-  init = false,
-): Promise<boolean> {
+export function checkWebSocketAvailable(timeoutMs = 2000, init = false): Promise<boolean> {
   const url = "ws://localhost:3000";
   return new Promise((resolve) => {
     const ws = new WebSocket(url);
@@ -788,11 +733,7 @@ export function checkWebSocketAvailable(
             checkWebSocketAvailable(timeoutMs, true);
           }, 1000);
           serverReady = false;
-          vscode.commands.executeCommand(
-            "setContext",
-            "bst.serverReady",
-            false,
-          );
+          vscode.commands.executeCommand("setContext", "bst.serverReady", false);
         }
         return;
       }
@@ -1014,9 +955,7 @@ class PlaceholderNode extends vscode.TreeItem {
 type FileTreeItem = FileNode | PlaceholderNode;
 
 class FileProvider implements vscode.TreeDataProvider<FileTreeItem> {
-  private _onDidChangeTreeData = new vscode.EventEmitter<
-    FileTreeItem | undefined | null
-  >();
+  private _onDidChangeTreeData = new vscode.EventEmitter<FileTreeItem | undefined | null>();
   readonly onDidChangeTreeData = this._onDidChangeTreeData.event;
 
   private roots: FileTreeItem[] = [];
@@ -1039,17 +978,13 @@ class FileProvider implements vscode.TreeDataProvider<FileTreeItem> {
   setConnected(val: boolean) {
     this._connected = val;
     if (!val) {
-      this.roots = [
-        new PlaceholderNode("Not connected", "Click Connect in the toolbar"),
-      ];
+      this.roots = [new PlaceholderNode("Not connected", "Click Connect in the toolbar")];
       this._onDidChangeTreeData.fire(undefined);
     }
   }
 
   showNoProjects() {
-    this.roots = [
-      new PlaceholderNode("No projects found", "Add .rbxl files to ./projects"),
-    ];
+    this.roots = [new PlaceholderNode("No projects found", "Add .rbxl files to ./projects")];
     this._onDidChangeTreeData.fire(undefined);
   }
 
@@ -1064,16 +999,9 @@ class FileProvider implements vscode.TreeDataProvider<FileTreeItem> {
 
   clear() {
     if (this._connected) {
-      this.roots = [
-        new PlaceholderNode(
-          "No project open",
-          'Use "Select Project" to open one',
-        ),
-      ];
+      this.roots = [new PlaceholderNode("No project open", 'Use "Select Project" to open one')];
     } else {
-      this.roots = [
-        new PlaceholderNode("Not connected", "Click Connect in the toolbar"),
-      ];
+      this.roots = [new PlaceholderNode("Not connected", "Click Connect in the toolbar")];
     }
     this._onDidChangeTreeData.fire(undefined);
   }
@@ -1105,10 +1033,7 @@ class PropertyItem extends vscode.TreeItem {
   propValue?: string;
   ownerNode?: FileNode;
 
-  constructor(
-    label: string,
-    opts?: { propKey: string; propValue: string; ownerNode: FileNode },
-  ) {
+  constructor(label: string, opts?: { propKey: string; propValue: string; ownerNode: FileNode }) {
     super(label, vscode.TreeItemCollapsibleState.None);
     if (opts) {
       this.propKey = opts.propKey;
@@ -1126,9 +1051,7 @@ function parseSimpleYaml(raw: string): Record<string, string> {
   const result: Record<string, string> = {};
   for (const line of raw.split(/\r?\n/)) {
     // Match: key: value  OR  key: 'value'  OR  key: "value"
-    const match = line.match(
-      /^([A-Za-z_][A-Za-z0-9_]*):\s*(['"]?)(.*)(\2)\s*$/,
-    );
+    const match = line.match(/^([A-Za-z_][A-Za-z0-9_]*):\s*(['"]?)(.*)(\2)\s*$/);
     if (match) {
       const [, key, , value] = match;
       result[key] = value;
@@ -1138,9 +1061,7 @@ function parseSimpleYaml(raw: string): Record<string, string> {
 }
 
 class PropertiesPanel implements vscode.TreeDataProvider<PropertyItem> {
-  private _onDidChangeTreeData = new vscode.EventEmitter<
-    PropertyItem | undefined | null
-  >();
+  private _onDidChangeTreeData = new vscode.EventEmitter<PropertyItem | undefined | null>();
   readonly onDidChangeTreeData = this._onDidChangeTreeData.event;
 
   private items: PropertyItem[] = [];
@@ -1212,110 +1133,120 @@ class PropertiesPanel implements vscode.TreeDataProvider<PropertyItem> {
 }
 
 class GitPanel implements vscode.TreeDataProvider<PropertyItem> {
-    private _onDidChangeTreeData = new vscode.EventEmitter<PropertyItem | undefined | null>();
-    readonly onDidChangeTreeData = this._onDidChangeTreeData.event;
+  private _onDidChangeTreeData = new vscode.EventEmitter<PropertyItem | undefined | null>();
+  readonly onDidChangeTreeData = this._onDidChangeTreeData.event;
 
-    private items: PropertyItem[] = [];
+  private items: PropertyItem[] = [];
 
-    getTreeItem(element: PropertyItem): vscode.TreeItem { return element; }
-    getChildren(): PropertyItem[] { return this.items; }
+  getTreeItem(element: PropertyItem): vscode.TreeItem {
+    return element;
+  }
+  getChildren(): PropertyItem[] {
+    return this.items;
+  }
 
-    update(node: FileNode) {
-        this.items = [];
+  update(node: FileNode) {
+    this.items = [];
 
-        // Header section
-        const nameItem = new PropertyItem(`${node.label}`);
-        nameItem.description = node.className;
-        nameItem.iconPath = getIconForClass(node.className, node.children.length > 0);
-        nameItem.tooltip = `${node.label} (${node.className})`;
-        this.items.push(nameItem);
+    // Header section
+    const nameItem = new PropertyItem(`${node.label}`);
+    nameItem.description = node.className;
+    nameItem.iconPath = getIconForClass(node.className, node.children.length > 0);
+    nameItem.tooltip = `${node.label} (${node.className})`;
+    this.items.push(nameItem);
 
-        // Read & display properties from YAML
-        const propsFile = path.join(node.fullPath, 'properties.yaml');
-        if (fs.existsSync(propsFile)) {
-            try {
-                const raw = fs.readFileSync(propsFile, 'utf-8');
-                const props = parseSimpleYaml(raw);
+    // Read & display properties from YAML
+    const propsFile = path.join(node.fullPath, "properties.yaml");
+    if (fs.existsSync(propsFile)) {
+      try {
+        const raw = fs.readFileSync(propsFile, "utf-8");
+        const props = parseSimpleYaml(raw);
 
-                if (Object.keys(props).length === 0) {
-                    this.items.push(new PropertyItem('(no properties)'));
-                } else {
-                    for (const [key, value] of Object.entries(props)) {
-                        this.items.push(new PropertyItem(key, {
-                            propKey: key,
-                            propValue: value,
-                            ownerNode: node
-                        }));
-                    }
-                }
-            } catch {
-                this.items.push(new PropertyItem('(error reading properties.yaml)'));
-            }
+        if (Object.keys(props).length === 0) {
+          this.items.push(new PropertyItem("(no properties)"));
         } else {
-            this.items.push(new PropertyItem('(no properties.yaml found)'));
+          for (const [key, value] of Object.entries(props)) {
+            this.items.push(
+              new PropertyItem(key, {
+                propKey: key,
+                propValue: value,
+                ownerNode: node,
+              }),
+            );
+          }
         }
-
-        // Script shortcut
-        if (node.scriptPath) {
-            const scriptItem = new PropertyItem('Open Script');
-            scriptItem.iconPath = new vscode.ThemeIcon('file-code');
-            scriptItem.tooltip = 'Open script in editor';
-            scriptItem.command = {
-                command: 'bst.openScript',
-                title: 'Open Script',
-                arguments: [node]
-            };
-            this.items.push(scriptItem);
-        }
-
-        this._onDidChangeTreeData.fire(undefined);
+      } catch {
+        this.items.push(new PropertyItem("(error reading properties.yaml)"));
+      }
+    } else {
+      this.items.push(new PropertyItem("(no properties.yaml found)"));
     }
 
-    clear() {
-        this.items = [];
-        this._onDidChangeTreeData.fire(undefined);
+    // Script shortcut
+    if (node.scriptPath) {
+      const scriptItem = new PropertyItem("Open Script");
+      scriptItem.iconPath = new vscode.ThemeIcon("file-code");
+      scriptItem.tooltip = "Open script in editor";
+      scriptItem.command = {
+        command: "bst.openScript",
+        title: "Open Script",
+        arguments: [node],
+      };
+      this.items.push(scriptItem);
     }
+
+    this._onDidChangeTreeData.fire(undefined);
+  }
+
+  clear() {
+    this.items = [];
+    this._onDidChangeTreeData.fire(undefined);
+  }
 }
 
 export class GitPanelProvider implements vscode.TreeDataProvider<GitItem> {
-    private _onDidChangeTreeData: vscode.EventEmitter<GitItem | undefined | void> = new vscode.EventEmitter<GitItem | undefined | void>();
-    readonly onDidChangeTreeData: vscode.Event<GitItem | undefined | void> = this._onDidChangeTreeData.event;
+  private _onDidChangeTreeData: vscode.EventEmitter<GitItem | undefined | void> =
+    new vscode.EventEmitter<GitItem | undefined | void>();
+  readonly onDidChangeTreeData: vscode.Event<GitItem | undefined | void> =
+    this._onDidChangeTreeData.event;
 
-    private gitState: GitItem[] = [];
+  private gitState: GitItem[] = [];
 
-    constructor() {
-        // Initial load
-        this.refresh();
+  constructor() {
+    // Initial load
+    this.refresh();
+  }
+
+  refresh(): void {
+    // Calls the bst.updateGitState command to get current git status
+    vscode.commands.executeCommand("bst.updateGitState").then((state: any) => {
+      // You can adapt this depending on what bst.updateGitState returns
+      // For now, assume it returns an array of file names or simple objects
+      this.gitState = state.map(
+        (file: any) => new GitItem(file.name || file, vscode.TreeItemCollapsibleState.None),
+      );
+      this._onDidChangeTreeData.fire();
+    });
+  }
+
+  getTreeItem(element: GitItem): vscode.TreeItem {
+    return element;
+  }
+
+  getChildren(element?: GitItem): Thenable<GitItem[]> {
+    if (!element) {
+      return Promise.resolve(this.gitState);
     }
-
-    refresh(): void {
-        // Calls the bst.updateGitState command to get current git status
-        vscode.commands.executeCommand('bst.updateGitState').then((state: any) => {
-            // You can adapt this depending on what bst.updateGitState returns
-            // For now, assume it returns an array of file names or simple objects
-            this.gitState = state.map((file: any) => new GitItem(file.name || file, vscode.TreeItemCollapsibleState.None));
-            this._onDidChangeTreeData.fire();
-        });
-    }
-
-    getTreeItem(element: GitItem): vscode.TreeItem {
-        return element;
-    }
-
-    getChildren(element?: GitItem): Thenable<GitItem[]> {
-        if (!element) {
-            return Promise.resolve(this.gitState);
-        }
-        return Promise.resolve([]);
-    }
+    return Promise.resolve([]);
+  }
 }
 
 export class GitItem extends vscode.TreeItem {
-    constructor(
-        public readonly label: string,
-        public readonly collapsibleState: vscode.TreeItemCollapsibleState
-    ) {
-        super(label, collapsibleState);
-        this.contextValue = 'gitItem';
-    }
+  constructor(
+    public readonly label: string,
+    public readonly collapsibleState: vscode.TreeItemCollapsibleState,
+  ) {
+    super(label, collapsibleState);
+    this.contextValue = "gitItem";
+  }
 }
