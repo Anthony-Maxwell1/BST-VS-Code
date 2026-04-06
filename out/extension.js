@@ -1,58 +1,17 @@
-<<<<<<< HEAD
-"use strict";
-var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
-    if (k2 === undefined) k2 = k;
-    var desc = Object.getOwnPropertyDescriptor(m, k);
-    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
-      desc = { enumerable: true, get: function() { return m[k]; } };
-    }
-    Object.defineProperty(o, k2, desc);
-}) : (function(o, m, k, k2) {
-    if (k2 === undefined) k2 = k;
-    o[k2] = m[k];
-}));
-var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
-    Object.defineProperty(o, "default", { enumerable: true, value: v });
-}) : function(o, v) {
-    o["default"] = v;
-});
-var __importStar = (this && this.__importStar) || (function () {
-    var ownKeys = function(o) {
-        ownKeys = Object.getOwnPropertyNames || function (o) {
-            var ar = [];
-            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
-            return ar;
-        };
-        return ownKeys(o);
-    };
-    return function (mod) {
-        if (mod && mod.__esModule) return mod;
-        var result = {};
-        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
-        __setModuleDefault(result, mod);
-        return result;
-    };
-})();
-var __importDefault = (this && this.__importDefault) || function (mod) {
-    return (mod && mod.__esModule) ? mod : { "default": mod };
-};
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.GitItem = exports.GitPanelProvider = void 0;
-exports.activate = activate;
-exports.deactivate = deactivate;
-const vscode = __importStar(require("vscode"));
-const ws_1 = __importDefault(require("ws"));
-const fs = __importStar(require("fs"));
-const path = __importStar(require("path"));
-=======
 import * as vscode from "vscode";
 import WebSocket from "ws";
 import * as fs from "fs";
 import * as path from "path";
 import * as cp from "child_process";
 import * as os from "os";
-import * as controller from "./embed/win.js";
->>>>>>> 11df365c5807669d808a0ac66086fde48d019e4a
+let controller;
+switch (process.platform) {
+    case "win32":
+        controller = await import("./embed/win.js");
+        break;
+    default:
+        controller = null;
+}
 // ------------------- WebSocket & State -------------------
 let extensionPath;
 let ws;
@@ -60,11 +19,8 @@ let fileProvider;
 let propertiesPanel;
 let gitPanel;
 let connected = false;
-<<<<<<< HEAD
-let usingGit = false; // whether the backend project is a git repo
-=======
 let serverReady = false;
->>>>>>> 11df365c5807669d808a0ac66086fde48d019e4a
+let usingGit = false; // whether the backend project is a git repo
 const pendingRequests = new Map();
 let nextId = 1;
 function generateId() {
@@ -92,7 +48,7 @@ function sendCliCommand(command, args) {
 }
 function sendGitCommand(command, args) {
     return new Promise((resolve, reject) => {
-        if (!ws || ws.readyState !== ws_1.default.OPEN) {
+        if (!ws || ws.readyState !== WebSocket.OPEN) {
             return reject(new Error('WebSocket is not connected'));
         }
         const id = generateId();
@@ -144,23 +100,15 @@ function handleMessage(raw) {
 export function activate(context) {
     fileProvider = new FileProvider();
     propertiesPanel = new PropertiesPanel();
-<<<<<<< HEAD
-    gitPanel = new GitPanel();
-    const fileTreeView = vscode.window.createTreeView('filePanel', {
-=======
     extensionPath = context.extensionPath;
+    gitPanel = new GitPanel();
     const fileTreeView = vscode.window.createTreeView("filePanel", {
->>>>>>> 11df365c5807669d808a0ac66086fde48d019e4a
         treeDataProvider: fileProvider,
         showCollapseAll: true,
     });
     context.subscriptions.push(fileTreeView);
-<<<<<<< HEAD
-    context.subscriptions.push(vscode.window.registerTreeDataProvider('propertiesPanel', propertiesPanel));
-    context.subscriptions.push(vscode.window.registerTreeDataProvider('gitPanel', gitPanel));
-=======
     context.subscriptions.push(vscode.window.registerTreeDataProvider("propertiesPanel", propertiesPanel));
->>>>>>> 11df365c5807669d808a0ac66086fde48d019e4a
+    context.subscriptions.push(vscode.window.registerTreeDataProvider('gitPanel', gitPanel));
     // Handle selection changes in the file tree → update properties
     context.subscriptions.push(fileTreeView.onDidChangeSelection((e) => {
         if (e.selection.length > 0 && e.selection[0] instanceof FileNode) {
@@ -437,19 +385,34 @@ export function activate(context) {
 }
 class RobloxViewportProvider {
     async resolveCustomTextEditor(document, webviewPanel) {
-        webviewPanel.webview.options = {
-            enableScripts: true, // <-- set it here
-        };
-        const hwnd = await controller.getRobloxHwnd(); // your HWND finder
-        if (!hwnd) {
-            vscode.window.showErrorMessage("No Roblox Studio window found");
-            return;
+        const options = { modal: true };
+        vscode.window.showWarningMessage(`⚠️ Roblox Viewport (Experimental)
+
+This feature is highly experimental and currently has major limitations:
+
+• Roblox Studio must be open
+• Performance is very poor (significant lag)
+• No user input support
+• Windows only (no other platforms supported)
+
+We strongly recommend using VS Code purely as an editor for now, similar to a Unity workflow.`, options);
+        if (controller === null) {
+            webviewPanel.webview.html = `<html><body><h2>Unsupported platform</h2><p>Roblox viewport is only supported on Windows for now.</p></body></html>`;
         }
-        const captureHandle = controller.init_capture(hwnd);
-        const bufferSize = 1920 * 1080 * 4; // max expected size
-        const buffer = Buffer.alloc(bufferSize);
-        // Webview HTML
-        webviewPanel.webview.html = `<!DOCTYPE html>
+        else {
+            webviewPanel.webview.options = {
+                enableScripts: true, // <-- set it here
+            };
+            const hwnd = await controller.getRobloxHwnd(); // your HWND finder
+            if (!hwnd) {
+                vscode.window.showErrorMessage("No Roblox Studio window found");
+                return;
+            }
+            const captureHandle = controller.init_capture(hwnd);
+            const bufferSize = 1920 * 1080 * 4; // max expected size
+            const buffer = Buffer.alloc(bufferSize);
+            // Webview HTML
+            webviewPanel.webview.html = `<!DOCTYPE html>
 <html>
 <body style="margin:0;background:black;overflow:hidden;padding:0;">
 <canvas id="c"></canvas>
@@ -542,33 +505,34 @@ window.addEventListener('message', event=>{
 </script>
 </body>
 </html>`;
-        let running = true;
-        const updateFrame = () => {
-            if (!running)
-                return;
-            const widthBuf = Buffer.alloc(4);
-            const heightBuf = Buffer.alloc(4);
-            const ok = controller.get_frame(captureHandle, buffer, widthBuf, heightBuf);
-            if (ok) {
-                const w = widthBuf.readUInt32LE(0);
-                const h = heightBuf.readUInt32LE(0);
-                const frameSize = w * h * 4;
-                // Slice into a plain ArrayBuffer — this serializes correctly over IPC
-                const ab = buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + frameSize);
-                webviewPanel.webview.postMessage({
-                    type: "frame",
-                    data: ab,
-                    width: w,
-                    height: h,
-                });
-            }
-            setTimeout(updateFrame, 16); // ~60fps, don't saturate event loop
-        };
-        updateFrame();
-        webviewPanel.onDidDispose(() => {
-            running = false;
-            controller.release_capture(captureHandle);
-        });
+            let running = true;
+            const updateFrame = () => {
+                if (!running)
+                    return;
+                const widthBuf = Buffer.alloc(4);
+                const heightBuf = Buffer.alloc(4);
+                const ok = controller.get_frame(captureHandle, buffer, widthBuf, heightBuf);
+                if (ok) {
+                    const w = widthBuf.readUInt32LE(0);
+                    const h = heightBuf.readUInt32LE(0);
+                    const frameSize = w * h * 4;
+                    // Slice into a plain ArrayBuffer — this serializes correctly over IPC
+                    const ab = buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + frameSize);
+                    webviewPanel.webview.postMessage({
+                        type: "frame",
+                        data: ab,
+                        width: w,
+                        height: h,
+                    });
+                }
+                setTimeout(updateFrame, 16); // ~60fps, don't saturate event loop
+            };
+            updateFrame();
+            webviewPanel.onDidDispose(() => {
+                running = false;
+                controller.release_capture(captureHandle);
+            });
+        }
     }
 }
 // ------------------- Project Loading -------------------
@@ -1003,7 +967,7 @@ class GitPanel {
         // Header section
         const nameItem = new PropertyItem(`${node.label}`);
         nameItem.description = node.className;
-        nameItem.iconPath = getIconForClass(node.className, !!node.scriptPath, node.children.length > 0);
+        nameItem.iconPath = getIconForClass(node.className, node.children.length > 0);
         nameItem.tooltip = `${node.label} (${node.className})`;
         this.items.push(nameItem);
         // Read & display properties from YAML
@@ -1051,7 +1015,7 @@ class GitPanel {
         this._onDidChangeTreeData.fire(undefined);
     }
 }
-class GitPanelProvider {
+export class GitPanelProvider {
     _onDidChangeTreeData = new vscode.EventEmitter();
     onDidChangeTreeData = this._onDidChangeTreeData.event;
     gitState = [];
@@ -1078,8 +1042,7 @@ class GitPanelProvider {
         return Promise.resolve([]);
     }
 }
-exports.GitPanelProvider = GitPanelProvider;
-class GitItem extends vscode.TreeItem {
+export class GitItem extends vscode.TreeItem {
     label;
     collapsibleState;
     constructor(label, collapsibleState) {
@@ -1089,5 +1052,4 @@ class GitItem extends vscode.TreeItem {
         this.contextValue = 'gitItem';
     }
 }
-exports.GitItem = GitItem;
 //# sourceMappingURL=extension.js.map

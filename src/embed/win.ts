@@ -1,6 +1,10 @@
 import psList from "ps-list";
 import koffi, { proto } from "koffi";
 
+if (process.platform !== "win32") {
+  throw new Error("This module is only supported on Windows");
+}
+
 const user32 = koffi.load("user32.dll");
 
 export const WNDENUMPROC = koffi.proto(

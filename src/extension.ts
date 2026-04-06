@@ -4,8 +4,15 @@ import * as fs from "fs";
 import * as path from "path";
 import * as cp from "child_process";
 import * as os from "os";
-import * as controller from "./embed/win.js";
+let controller: any;
 
+switch (process.platform) {
+    case "win32":
+        controller = await import("./embed/win.js");
+        break;
+    default:
+        controller = null;
+}
 // ------------------- WebSocket & State -------------------
 
 let extensionPath: string;
@@ -509,6 +516,22 @@ class RobloxViewportProvider implements vscode.CustomTextEditorProvider {
     document: vscode.TextDocument,
     webviewPanel: vscode.WebviewPanel,
   ) {
+    const options: vscode.MessageOptions = { modal: true };
+vscode.window.showWarningMessage(
+    `⚠️ Roblox Viewport (Experimental)
+
+This feature is highly experimental and currently has major limitations:
+
+• Roblox Studio must be open
+• Performance is very poor (significant lag)
+• No user input support
+• Windows only (no other platforms supported)
+
+We strongly recommend using VS Code purely as an editor for now, similar to a Unity workflow.`,
+    options
+);    if (controller === null) {
+      webviewPanel.webview.html = `<html><body><h2>Unsupported platform</h2><p>Roblox viewport is only supported on Windows for now.</p></body></html>`;
+    } else {
     webviewPanel.webview.options = {
       enableScripts: true, // <-- set it here
     };
@@ -662,6 +685,7 @@ window.addEventListener('message', event=>{
       controller.release_capture(captureHandle);
     });
   }
+}
 }
 
 // ------------------- Project Loading -------------------
