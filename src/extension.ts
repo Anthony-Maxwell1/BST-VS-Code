@@ -155,24 +155,48 @@ export function activate(context: vscode.ExtensionContext) {
         vscode.window.showInformationMessage("Server already ready");
         return;
       }
-      cp.exec("bst run", (err, stdout, stderr) => {
-        if (err) {
-          // err is usually a ChildProcessError which has a 'code' property
-          const exitCode = (err as any).code; // typecast if needed
-          if (exitCode === 1) {
-            vscode.window.showErrorMessage(
-              "BST Core not installed. Install by running Fetch Core in the command pallete.",
-            );
-          } else {
-            vscode.window.showErrorMessage(
-              `BST Cli might not be installed. Install by running Install CLI in command pallete. Server failed with exit code ${exitCode}: ${err.message}.`,
-            );
-          }
+
+      let proc: cp.ChildProcessWithoutNullStreams;
+
+      if (process.platform === "win32") {
+        // On Windows, just call bst directly
+        proc = cp.spawn("bst", ["run"], {
+          shell: true, // Use shell to resolve PATH correctly
+          env: process.env,
+        });
+      } else {
+        proc = cp.spawn("bash", ["-c", `source ~/.bashrc && bst run`], {
+          env: process.env,
+        });
+      }
+
+      // Stream stdout
+      proc.stdout.on("data", (data: Buffer) => {
+        const message = data.toString();
+        console.log("STDOUT:", message);
+        // Optional: show in a VS Code OutputChannel
+      });
+
+      // Stream stderr
+      proc.stderr.on("data", (data: Buffer) => {
+        const message = data.toString();
+        console.error("STDERR:", message);
+        // Optional: show in a VS Code OutputChannel
+      });
+
+      // Spawn-level errors
+      proc.on("error", (err) => {
+        vscode.window.showErrorMessage(`Failed to start: ${err.message}`);
+      });
+
+      // Exit code
+      proc.on("exit", (code) => {
+        if (code !== 0) {
+          vscode.window.showErrorMessage(`bst run exited with code ${code}`);
         } else {
-          vscode.window.showInformationMessage("Server started");
+          vscode.window.showInformationMessage("bst run completed successfully");
         }
       });
-      serverReady = true;
     }),
   );
 
@@ -257,11 +281,47 @@ export function activate(context: vscode.ExtensionContext) {
 
   context.subscriptions.push(
     vscode.commands.registerCommand("bst.installCore", async () => {
-      cp.exec("bst fetch", (err, stdout, stderr) => {
-        if (err) {
-          vscode.window.showErrorMessage("Failed to install Core: " + err.message);
+      let proc: cp.ChildProcessWithoutNullStreams;
+
+      if (process.platform === "win32") {
+        // On Windows, just call bst directly
+        proc = cp.spawn("bst", ["fetch"], {
+          shell: true, // Use shell to resolve PATH correctly
+          env: process.env,
+        });
+      } else {
+        // On Linux/macOS, use bash and source nvm if needed
+        // Adjust NVM_DIR if you use nvm
+        proc = cp.spawn("bash", ["-c", `source ~/.bashrc && bst fetch`], {
+          env: process.env,
+        });
+      }
+
+      // Stream stdout
+      proc.stdout.on("data", (data: Buffer) => {
+        const message = data.toString();
+        console.log("STDOUT:", message);
+        // Optional: show in a VS Code OutputChannel
+      });
+
+      // Stream stderr
+      proc.stderr.on("data", (data: Buffer) => {
+        const message = data.toString();
+        console.error("STDERR:", message);
+        // Optional: show in a VS Code OutputChannel
+      });
+
+      // Spawn-level errors
+      proc.on("error", (err) => {
+        vscode.window.showErrorMessage(`Failed to start: ${err.message}`);
+      });
+
+      // Exit code
+      proc.on("exit", (code) => {
+        if (code !== 0) {
+          vscode.window.showErrorMessage(`bst fetch exited with code ${code}`);
         } else {
-          vscode.window.showInformationMessage("Core installed");
+          vscode.window.showInformationMessage("bst fetch completed successfully");
         }
       });
     }),
@@ -1205,48 +1265,30 @@ class GitPanel implements vscode.TreeDataProvider<PropertyItem> {
 }
 
 export class GitPanelProvider implements vscode.TreeDataProvider<GitItem> {
-  private _onDidChangeTreeData: vscode.EventEmitter<GitItem | undefined | void> =
-    new vscode.EventEmitter<GitItem | undefined | void>();
-  readonly onDidChangeTreeData: vscode.Event<GitItem | undefined | void> =
-    this._onDidChangeTreeData.event;
-
-  private gitState: GitItem[] = [];
-
-  constructor() {
-    // Initial load
-    this.refresh();
-  }
-
-  refresh(): void {
-    // Calls the bst.updateGitState command to get current git status
-    vscode.commands.executeCommand("bst.updateGitState").then((state: any) => {
-      // You can adapt this depending on what bst.updateGitState returns
-      // For now, assume it returns an array of file names or simple objects
-      this.gitState = state.map(
-        (file: any) => new GitItem(file.name || file, vscode.TreeItemCollapsibleState.None),
-      );
-      this._onDidChangeTreeData.fire();
-    });
-  }
+  private _onDidChangeTreeData = new vscode.EventEmitter<void>();
+  readonly onDidChangeTreeData = this._onDidChangeTreeData.event;
 
   getTreeItem(element: GitItem): vscode.TreeItem {
     return element;
   }
 
-  getChildren(element?: GitItem): Thenable<GitItem[]> {
-    if (!element) {
-      return Promise.resolve(this.gitState);
-    }
-    return Promise.resolve([]);
+  getChildren(): Thenable<GitItem[]> {
+    return Promise.resolve([
+      new GitItem("Pull", "cloud-download", "bst.gitPull"),
+      new GitItem("Commit & Push", "cloud-upload", "bst.gitCommit"),
+    ]);
   }
 }
 
-export class GitItem extends vscode.TreeItem {
-  constructor(
-    public readonly label: string,
-    public readonly collapsibleState: vscode.TreeItemCollapsibleState,
-  ) {
-    super(label, collapsibleState);
-    this.contextValue = "gitItem";
+class GitItem extends vscode.TreeItem {
+  constructor(label: string, icon: string, commandId: string) {
+    super(label, vscode.TreeItemCollapsibleState.None);
+
+    this.command = {
+      command: commandId,
+      title: label,
+    };
+
+    this.iconPath = new vscode.ThemeIcon(icon);
   }
 }
