@@ -120,6 +120,11 @@
         "command": "bst.gitCommit",
         "title": "Commit All Changes and Push",
         "icon": "$(git-commit)"
+      },
+      {
+        "command": "bst.newProperty",
+        "title": "New Property",
+        "icon": "$(add)"
       }
     ],
     "customEditors": [
@@ -170,6 +175,11 @@
           "command": "bst.closeProject",
           "when": "view == filePanel && bst.connected",
           "group": "navigation@4"
+        },
+        {
+          "command": "bst.newProperty",
+          "when": "view == propertiesPanel && bst.connected",
+          "group": "navigation@1"
         }
       ],
       "view/item/context": [

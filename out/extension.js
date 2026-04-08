@@ -346,9 +346,24 @@ export function activate(context) {
             // ignore errors
         }
     }));
+    context.subscriptions.push(vscode.commands.registerCommand("bst.newProperty", async (items) => {
+        const ownerNode = propertiesPanel.getSelectedNode(); // implement this in your TreeDataProvider
+        if (!ownerNode) {
+            vscode.window.showErrorMessage("No node selected!");
+            return;
+        }
+        const propKey = await vscode.window.showInputBox({
+            prompt: "Property/Attribute name (e.g. Color)",
+        });
+        if (!propKey)
+            return;
+        let prop = new PropertyItem("", { propKey, propValue: "", ownerNode });
+        vscode.commands.executeCommand("bst.editProperty", prop);
+    }));
     // --- Edit a property (called from properties panel inline button) ---
     context.subscriptions.push(vscode.commands.registerCommand("bst.editProperty", async (item) => {
         if (!item?.propKey || !item.ownerNode) {
+            console.log(item);
             return;
         }
         const newValue = await vscode.window.showInputBox({
@@ -945,14 +960,19 @@ class PropertiesPanel {
     _onDidChangeTreeData = new vscode.EventEmitter();
     onDidChangeTreeData = this._onDidChangeTreeData.event;
     items = [];
+    node = null;
     getTreeItem(element) {
         return element;
     }
     getChildren() {
         return this.items;
     }
+    getSelectedNode() {
+        return this.node;
+    }
     update(node) {
         this.items = [];
+        this.node = node;
         // Header section
         const nameItem = new PropertyItem(`${node.label}`);
         nameItem.description = node.className;
